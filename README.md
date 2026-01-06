@@ -140,6 +140,10 @@ python scripts/utilities/run_example.py ^
 - The training data shuffle uses a fixed seed by default (configurable via the example script).
 - Reported results may vary across GPU / CUDA / driver versions; please include your hardware details when reporting numbers.
 
+## Acknowledgements
+
+This project references the implementation of the [Circuit Transformer code](https://github.com/snowkylin/circuit-transformer) repository.
+
 ## License & Anonymity
 
 - **License**: see `LICENSE`.
