@@ -97,7 +97,7 @@ class CircuitTransformer:
         self.input_tt = compute_input_tt(self.num_inputs)
 
     def build_model(self):
-        """显式构建模型变量"""
+        """Explicitly build model variables"""
         dummy_inputs = {
             'inputs': tf.zeros((1, self.max_seq_length), dtype=tf.int32),
             'enc_pos_encoding': tf.zeros((1, self.max_seq_length, self.max_tree_depth*2)),
@@ -106,7 +106,7 @@ class CircuitTransformer:
             'enc_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool),
             'dec_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool)
         }
-        _ = self._transformer(dummy_inputs)  # 触发变量创建
+        _ = self._transformer(dummy_inputs)  # Trigger variable creation
 
     def freeze_layers(self, freeze_encoder=True):
         """Freeze encoder layers, only train decoder layers"""
@@ -630,14 +630,14 @@ class CircuitTransformer:
                                                   dtype=tf.bool)
             }, tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32)
         )
-        print("正在创建TensorFlow数据集...")
+        print("Creating TensorFlow dataset...")
         train_dataset = tf.data.Dataset.from_generator(mp_dataset.train_generator,
                                                        output_signature=output_signature) \
             .batch(batch_size).prefetch(tf.data.AUTOTUNE)
         validation_dataset = tf.data.Dataset.from_generator(mp_dataset.validation_generator,
                                                             output_signature=output_signature) \
             .batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        print("数据集创建完成")
+        print("Dataset creation completed")
         
         if profile:
             if not os.path.exists(log_dir):
@@ -675,7 +675,7 @@ class CircuitTransformer:
                 print(f"Batch {batch} finished with logs: {logs}")
                 # step = transformer.optimizer.iterations.numpy()
                 with summary_writer.as_default():
-                    # 写入损失和准确率
+                    # Write loss and accuracy
                     tf.summary.scalar('loss', logs['loss'], step=batch)
                     tf.summary.scalar('accuracy', logs['accuracy'], step=batch)
                 pass
@@ -696,7 +696,7 @@ class CircuitTransformer:
                 save_freq=(len(mp_dataset) * (epochs - initial_epoch) // batch_size) if latest_ckpt_only else 'epoch') # type: ignore
             callbacks.append(checkpoint)
 
-        print("开始训练，准备调用 fit() 方法")
+        print("Starting training, preparing to call fit() method")
         transformer.fit(train_dataset,
                         initial_epoch=initial_epoch,
                         epochs=epochs,
@@ -707,7 +707,7 @@ class CircuitTransformer:
         print("training finished")
 
         if profile:
-            # 简单的profiling，不使用trace_export
+            # Simple profiling without using trace_export
             print("Profiling completed. Check log directory for TensorBoard logs.")
 
         self._transformer.return_cache = True
@@ -739,46 +739,46 @@ class CircuitTransformer:
         if freeze_layers:
             self.freeze_layers(freeze_encoder=True)
 
-        """PPO训练循环"""
-        # 初始化优化器
+        """PPO training loop"""
+        # Initialize optimizers
         policy_optimizer = keras.optimizers.AdamW(learning_rate=policy_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
         value_optimizer = keras.optimizers.Adam(learning_rate=value_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
         
-        # 获取所有电路文件
+        # Get all circuit files
         circuit_files = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)]
         if not circuit_files:
             raise ValueError(f"No circuit files found in directory: {train_data_dir}")
-        
-        # 创建电路迭代器
+
+        # Create circuit iterator
         circuit_iterator = self._circuit_iterator(circuit_files)
-        
-        # 训练循环
+
+        # Training loop
         for epoch in range(epochs):
-            # 收集轨迹数据
+            # Collect trajectory data
             trajectories = []
             for step in range(steps_per_epoch):
                 current_circuit = next(circuit_iterator)
-                
-                # 创建当前电路的环境
+
+                # Create environment for current circuit
                 env = self._create_circuit_env(current_circuit)
                 state = env._get_obs()
                 done = False
                 episode_data = []
                 
                 while not done:
-                    # 准备模型输入
+                    # Prepare model input
                     inputs = self._prepare_model_input(state)
-                    
-                    # 使用当前策略选择动作
+
+                    # Select action using current policy
                     logits, value = self._transformer_inference(inputs, return_last_token=True)
                     action, log_prob = self._sample_action(logits[0], state['action_mask'])
                     
-                    # 执行动作
+                    # Execute action
                     next_state, reward, done = self._batch_step([env], [action])
                     next_state = next_state[0]
                     reward = reward[0]
                     done = done[0]
-                    # 存储转换
+                    # Store transition
                     episode_data.append({
                         'state': state,
                         'action': action,
@@ -790,30 +790,30 @@ class CircuitTransformer:
                     
                     state = next_state
                 
-                # 添加到轨迹数据
+                # Add to trajectory data
                 trajectories.append(episode_data)
-            
-            # 处理轨迹数据
+
+            # Process trajectory data
             states, actions, old_log_probs, returns, advantages = self._process_trajectories(
                 trajectories, gamma
             )
             print(f"trajectories length = {len(trajectories)}")
             start_time = time.time()
-            # 更新策略
+            # Update policy
             policy_loss = self._update_policy(
                 states, actions, old_log_probs, advantages, 
                 policy_optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch
             )
             step1_time = time.time()
             print(f"Policy update total time: {step1_time - start_time:.4f} seconds")
-            # 更新价值函数
+            # Update value function
             value_loss = self._update_value_function(
                 states, returns, value_optimizer, batch_size, ppo_train_epoch
             )
             step2_time = time.time()
             print(f"Value update total time: {step2_time - step1_time:.4f} seconds")
 
-            # 打印进度
+            # Print progress
             print(f"Epoch {epoch+1}/{epochs} | "
                 f"Policy Loss: {policy_loss:.4f} | "
                 f"Value Loss: {value_loss:.4f} | "
@@ -824,35 +824,35 @@ class CircuitTransformer:
                         f"Avg Return: {np.mean(returns):.2f}")
             print(log_msg)
             log_file.write(log_msg + "\n")
-            log_file.flush()  # 保证及时写入磁盘
+            log_file.flush()  # Ensure immediate write to disk
 
-            # 定期保存模型
+            # Periodically save model
             if (epoch + 1) % 5 == 0 and ckpt_save_path is not None:
                 save_path = os.path.join(ckpt_save_path, f"model-{epoch+1:04d}")
                 self._transformer.save_weights(save_path)
                 print(f"Model weights saved at {save_path}")
 
     def _circuit_iterator(self, circuit_files):
-        """创建电路文件的无限迭代器"""
+        """Create infinite iterator for circuit files"""
         while True:
-            # 随机打乱电路文件顺序
+            # Randomly shuffle circuit file order
             np.random.shuffle(circuit_files)
             for circuit_file in circuit_files:
                 yield circuit_file
     
     def _create_circuit_env(self, circuit_file):
-        """为给定电路文件创建环境"""
-        # 读取电路
+        """Create environment for given circuit file"""
+        # Read circuit
         with open(circuit_file, 'r') as f:
             roots_aiger, num_ands, opt_roots_aiger, opt_num_ands = json.load(f)
         
         roots, info = read_aiger(aiger_str=roots_aiger)
         num_inputs, num_outputs = info[1], info[3]
         
-        # 计算真值表
+        # Compute truth table
         tts = compute_tts(roots, num_inputs=num_inputs)
-        
-        # 创建环境
+
+        # Create environment
         return LogicNetworkEnv(
             tts=tts,
             num_inputs=num_inputs,
@@ -866,29 +866,29 @@ class CircuitTransformer:
         )
     
     def _prepare_model_input(self, state):
-        """准备Transformer的输入格式, 确保正确的形状"""
-        # 确保 inputs 是二维的 [1, sequence_length]
+        """Prepare Transformer input format, ensure correct shape"""
+        # Ensure inputs are 2D [1, sequence_length]
         tokens = state['tokens']
         if len(tokens.shape) == 1:
             inputs = tf.expand_dims(tokens, axis=0)  # [1, seq_len]
         else:
-            inputs = tokens  # 已经是正确的形状
-        
-        # 确保 enc_pos_encoding 是三维的 [batch, sequence_length, features]
+            inputs = tokens  # Already correct shape
+
+        # Ensure enc_pos_encoding is 3D [batch, sequence_length, features]
         pos_enc = state['positional_encodings']
         if len(pos_enc.shape) == 2:  # [seq_len, features]
             enc_pos_encoding = tf.expand_dims(pos_enc, axis=0)  # [1, seq_len, features]
         elif len(pos_enc.shape) == 3:  # [1, seq_len, features]
-            enc_pos_encoding = pos_enc  # 已经是正确的形状
-        elif len(pos_enc.shape) == 4:  # [1, seq_len, 1, features] - 需要压缩
+            enc_pos_encoding = pos_enc  # Already correct shape
+        elif len(pos_enc.shape) == 4:  # [1, seq_len, 1, features] - need to squeeze
             enc_pos_encoding = tf.squeeze(pos_enc, axis=2)  # [1, seq_len, features]
         else:
-            enc_pos_encoding = pos_enc  # 已经是正确的形状
-        
-        # 确保 enc_action_mask 是四维的 [batch, sequence_length, 1, vocab_size]
+            enc_pos_encoding = pos_enc  # Already correct shape
+
+        # Ensure enc_action_mask is 4D [batch, sequence_length, 1, vocab_size]
         action_mask = state['action_mask']
         if len(action_mask.shape) == 1:  # [vocab_size]
-            # 创建与序列长度匹配的动作掩码
+            # Create action mask matching sequence length
             seq_len = tf.shape(inputs)[1]
             enc_action_mask = tf.tile(
                 tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask, axis=0), axis=0), axis=0),
@@ -899,27 +899,27 @@ class CircuitTransformer:
         elif len(action_mask.shape) == 3:  # [1, seq_len, vocab_size]
             enc_action_mask = tf.expand_dims(action_mask, axis=2)  # [1, seq_len, 1, vocab_size]
         else:
-            enc_action_mask = action_mask  # 已经是正确的形状
-        
-        # 处理 targets - 使用最后一个token，确保形状为 [batch, 1]
+            enc_action_mask = action_mask  # Already correct shape
+
+        # Handle targets - use last token, ensure shape [batch, 1]
         if tf.shape(inputs)[1] > 0:
-            last_token = inputs[0, -1]  # 获取最后一个token
+            last_token = inputs[0, -1]  # Get last token
             targets = tf.expand_dims(tf.expand_dims(last_token, axis=0), axis=0)  # [1, 1]
         else:
             targets = tf.zeros((1, 1), dtype=tf.int32)
         
-        # 处理 dec_pos_encoding - 使用最后一个位置编码，确保形状为 [batch, 1, features]
+        # Handle dec_pos_encoding - use last positional encoding, ensure shape [batch, 1, features]
         if tf.shape(enc_pos_encoding)[1] > 0:
-            last_pos_enc = enc_pos_encoding[0, -1, :]  # 获取最后一个位置编码
+            last_pos_enc = enc_pos_encoding[0, -1, :]  # Get last positional encoding
             dec_pos_encoding = tf.expand_dims(tf.expand_dims(last_pos_enc, axis=0), axis=0)  # [1, 1, features]
         else:
             dec_pos_encoding = tf.zeros((1, 1, self.max_tree_depth * 2), dtype=tf.float32)
         
-        # 处理 dec_action_mask - 使用当前动作掩码，确保形状为 [batch, 1, 1, vocab_size]
+        # Handle dec_action_mask - use current action mask, ensure shape [batch, 1, 1, vocab_size]
         if len(state['action_mask'].shape) == 1:  # [vocab_size]
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(state['action_mask'], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         else:
-            # 如果已经有更高维度，取最后一个时间步
+            # If already higher dimension, take last time step
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask[-1], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         
         return {
@@ -932,7 +932,7 @@ class CircuitTransformer:
         }
 
     def _prepare_batch_input(self, states):
-        MAX_SEQ_LEN = self.max_seq_length  # 使用你模型中设定的最大序列长度
+        MAX_SEQ_LEN = self.max_seq_length  # Use max sequence length set in your model
 
         inputs = []
         enc_pos_encoding = []
@@ -973,13 +973,13 @@ class CircuitTransformer:
                 padded_mask = np.tile(mask, (MAX_SEQ_LEN, 1))
             enc_action_mask.append(np.expand_dims(padded_mask, axis=1))  # [seq_len, 1, vocab]
 
-            # targets - 最后一个 token
+            # targets - last token
             targets.append([s['tokens'][seq_len - 1]])
 
-            # dec_pos_encoding - 最后一个位置编码
+            # dec_pos_encoding - last positional encoding
             dec_pos_encoding.append([s['positional_encodings'][seq_len - 1]])
 
-            # dec_action_mask - 当前 action mask
+            # dec_action_mask - current action mask
             if mask.ndim == 1:  # [vocab]
                 dec_action_mask.append([[mask]])
             else:
@@ -1001,18 +1001,18 @@ class CircuitTransformer:
         # 将mask应用于logits（将不可行动作对应的logits设为极小值）
         masked_logits = np.where(mask, logits, np.finfo(np.float32).min)
         
-        # 计算softmax
+        # Compute softmax
         probs = np.exp(masked_logits - np.max(masked_logits))
         probs /= np.sum(probs)
         probs = np.squeeze(probs)
-        # 采样动作
+        # Sample action
         action = np.random.choice(len(probs), p=probs)
         log_prob = np.log(probs[action])
         
         return action, log_prob
     
     def _process_trajectories(self, trajectories, gamma, lam=0.95):
-        """处理轨迹数据，计算回报和优势函数"""
+        """Process trajectory data, compute returns and advantages"""
         states = []
         actions = []
         old_log_probs = []
@@ -1020,7 +1020,7 @@ class CircuitTransformer:
         advantages = []
         
         for episode in trajectories:
-            # 提取轨迹数据
+            # Extract trajectory data
             episode_states = [step['state'] for step in episode]
             episode_actions = [step['action'] for step in episode]
             episode_rewards = [step['reward'] for step in episode]
@@ -1028,23 +1028,23 @@ class CircuitTransformer:
             episode_log_probs = [step['log_prob'] for step in episode]
             episode_dones = [step['done'] for step in episode]
             
-            # 确保数值类型一致
+            # Ensure consistent numeric types
             episode_rewards = [float(r) for r in episode_rewards]
             episode_values = [float(v) for v in episode_values]
             episode_log_probs = [float(lp) for lp in episode_log_probs]
             
-            # 计算蒙特卡洛回报
+            # Compute Monte Carlo returns
             R = 0.0
             discounted_returns = []
             for r in reversed(episode_rewards):
                 R = r + gamma * R
                 discounted_returns.insert(0, R)
             
-            # 计算广义优势估计 (GAE)
+            # Compute Generalized Advantage Estimation (GAE)
             advantages_ep = []
             last_gae = 0.0
             next_value = 0.0
-            next_done = True  # 假设episode结束时done=True
+            next_done = True  # Assume done=True when episode ends
             
             for t in reversed(range(len(episode))):
                 if t == len(episode) - 1:
@@ -1059,12 +1059,12 @@ class CircuitTransformer:
                 last_gae = gae
                 advantages_ep.insert(0, gae)
             
-            # 标准化优势函数
+            # Normalize advantage function
             advantages_ep = np.array(advantages_ep, dtype=np.float32)
             if advantages_ep.std() > 0:
                 advantages_ep = (advantages_ep - advantages_ep.mean()) / (advantages_ep.std() + 1e-8)
             
-            # 添加到结果列表
+            # Add to result list
             states.extend(episode_states)
             actions.extend(episode_actions)
             old_log_probs.extend(episode_log_probs)
@@ -1076,7 +1076,7 @@ class CircuitTransformer:
 
 
     def _update_policy(self, states, actions, old_log_probs, advantages, optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch):
-        """更新策略网络"""
+        """Update policy network"""
         @tf.function(reduce_retracing=True)
         def train_step(batch_inputs, batch_actions, batch_old_log_probs, batch_advantages, policy_vars):
             with tf.GradientTape() as tape:
@@ -1089,7 +1089,7 @@ class CircuitTransformer:
                 )
             grads = tape.gradient(policy_loss, policy_vars)
             return grads, policy_loss, kl
-        # 创建数据集（仅第一次）
+        # Create dataset (only first time)
         if not hasattr(self, 'policy_dataset') or self.policy_dataset is None:
             dataset = tf.data.Dataset.from_tensor_slices({
                 'tokens': tf.stack([s['tokens'] for s in states]),
@@ -1103,7 +1103,7 @@ class CircuitTransformer:
         else:
             dataset = self.policy_dataset
         
-        # 获取策略网络变量
+        # Get policy network variables
         policy_vars = [var for var in self._transformer.trainable_variables if 'value_head' not in var.name]
         
         total_policy_loss = 0
@@ -1112,7 +1112,7 @@ class CircuitTransformer:
         
         for ppo_epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 准备输入
+                # Prepare input
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
@@ -1122,7 +1122,7 @@ class CircuitTransformer:
                 )]
                 inputs = self._prepare_batch_input(batch_states)
                 
-                # 使用预定义计算图执行训练步骤
+                # Execute training step using predefined computation graph
                 grads, policy_loss, kl = train_step(
                     inputs,
                     batch['actions'],
@@ -1131,7 +1131,7 @@ class CircuitTransformer:
                     policy_vars
                 )
                 
-                # 应用梯度
+                # Apply gradients
                 if grads is not None:
                     grads, _ = tf.clip_by_global_norm(grads, 1.0)
                     optimizer.apply_gradients(zip(grads, policy_vars))
@@ -1140,20 +1140,20 @@ class CircuitTransformer:
                 total_kl += kl
                 num_batches += 1
                 
-                # 检查KL散度
+                # Check KL divergence
                 if total_kl / num_batches > 1.5 * target_kl:
                     print(f"Early stopping at KL divergence {total_kl/num_batches:.4f} > {1.5*target_kl:.4f}")
                     break
         
-        # 清理资源
+        # Clean up resources
         K.clear_session()
         gc.collect()
         
         return total_policy_loss / num_batches
 
     def _update_value_function(self, states, returns, optimizer, batch_size, ppo_train_epoch):
-        """更新价值函数"""
-        # 创建数据集 - 使用 TensorFlow 操作
+        """Update value function"""
+        # Create dataset - using TensorFlow operations
         dataset = tf.data.Dataset.from_tensor_slices({
             'tokens': tf.stack([s['tokens'] for s in states]),
             'pos_enc': tf.stack([s['positional_encodings'] for s in states]),
@@ -1161,17 +1161,17 @@ class CircuitTransformer:
             'returns': tf.convert_to_tensor(returns, dtype=tf.float32)
         })
         
-        # 应用批处理和预取
+        # Apply batching and prefetching
         dataset = dataset.shuffle(len(states)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
         
         total_value_loss = 0
         num_batches = 0
         
-        # 获取价值网络变量
+        # Get value network variables
         value_vars = self._transformer.value_head.trainable_variables
         for epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 使用修改后的 _prepare_batch_input 准备输入
+                # Use modified _prepare_batch_input to prepare input
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
@@ -1183,16 +1183,16 @@ class CircuitTransformer:
                 )]
                 inputs = self._prepare_batch_input(batch_states)
                 
-                # 准备参数
+                # Prepare parameters
                 returns_tensor = batch['returns']
                 
                 with tf.GradientTape() as tape:
-                    # 使用图模式计算价值损失
+                    # Compute value loss in graph mode
                     value_loss = self.value_forward_pass(inputs, returns_tensor)
                 
-                # 计算梯度并更新（只更新价值函数相关的权重）
+                # Compute gradients and update (only update value function related weights)
                 grads = tape.gradient(value_loss, value_vars)
-                if grads is not None:  # 确保梯度存在
+                if grads is not None:  # Ensure gradients exist
                     optimizer.apply_gradients(zip(grads, value_vars))
                 
                 total_value_loss += value_loss
@@ -1201,21 +1201,21 @@ class CircuitTransformer:
         return total_value_loss / (num_batches * ppo_train_epoch)
     
     def _log_prob(self, logits, actions):
-        """计算给定动作的对数概率"""
-        # 确保logits是float32类型
+        """Compute log probability for given actions"""
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
         
-        # 将logits转换为概率分布
+        # Convert logits to probability distribution
         probs = tf.nn.softmax(logits)
         
-        # 创建动作的one-hot编码
+        # Create one-hot encoding of actions
         actions_one_hot = tf.one_hot(actions, depth=self.vocab_size, dtype=tf.float32)
         
-        # 计算对数概率
+        # Compute log probability
         return tf.math.log(tf.reduce_sum(probs * actions_one_hot, axis=-1) + 1e-10)
 
     def _batch_step(self, envs, actions):
-        """批量执行环境步骤（向量化操作）"""
+        """Batch execute environment steps (vectorized operation)"""
         next_states = []
         rewards = []
         dones = []
@@ -1232,41 +1232,41 @@ class CircuitTransformer:
 
     @tf.function(reduce_retracing=True)
     def value_forward_pass(self, inputs, returns):
-        """价值网络前向传播（图模式）"""
-        # 预测价值
+        """Value network forward pass (graph mode)"""
+        # Predict value
         _, values = self._transformer(inputs, training=True)
         
-        # 确保数据类型一致 - 将values转换为float32
+        # Ensure data type consistency - convert values to float32
         values = tf.cast(values, tf.float32)
         returns = tf.cast(returns, tf.float32)
         
-        # 计算价值损失
+        # Compute value loss
         return tf.reduce_mean(tf.square(returns - values))
 
     @tf.function(reduce_retracing=True)
     def policy_forward_pass(self, inputs, actions, old_log_probs, advantages, clip_ratio):
-        """策略网络前向传播（图模式）"""
-        # 获取策略网络输出
+        """Policy network forward pass (graph mode)"""
+        # Get policy network output
         logits, _ = self._transformer(inputs, training=True)
         
-        # 确保logits是float32类型
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
         
-        # 计算新策略的对数概率
+        # Compute log probability of new policy
         new_log_probs = self._log_prob(logits, actions)
         
-        # 确保所有张量都是float32类型
+        # Ensure all tensors are float32 type
         new_log_probs = tf.cast(new_log_probs, tf.float32)
         old_log_probs = tf.cast(old_log_probs, tf.float32)
         advantages = tf.cast(advantages, tf.float32)
         
-        # 计算PPO损失
+        # Compute PPO loss
         ratio = tf.exp(new_log_probs - old_log_probs)
         surr1 = ratio * advantages
         surr2 = tf.clip_by_value(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
         policy_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))
         
-        # 计算KL散度
+        # Compute KL divergence
         kl = tf.reduce_mean(old_log_probs - new_log_probs)
         
         return policy_loss, kl, new_log_probs
@@ -1524,7 +1524,7 @@ class CircuitTransformer:
 
 
 if __name__ == "__main__":
-    # 推理测试：传入预训练模型权重
+    # Inference test: pass pretrained model weights
     circuit_transformer = CircuitTransformer(ckpt_path='./ckpt-origin/deepsyn_reinforced')
     aig0, info0 = read_aiger(aiger_str="""aag 33 8 0 2 25
 2\n4\n6\n8\n10\n12\n14\n16\n58\n67

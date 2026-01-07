@@ -1,12 +1,3 @@
-"""
-Error Metrics Module for Approximate Circuit Transformer
-
-Implements error measurement functions as described in the ACT paper:
-- Error Rate (ER) 
-- Mean Relative Error Distance (MRED)
-- Mean Squared Error (MSE)
-"""
-
 import numpy as np
 import bitarray
 import bitarray.util
@@ -72,6 +63,8 @@ class ErrorMetrics:
         total_errors = mismatch_mask.count()
         total_evaluations = len(mismatch_mask)
                 # if hasattr(diff, 'count'):
+
+                
                 #     # bitarray has count() method
                 #     total_errors += diff.count()
                 # else:

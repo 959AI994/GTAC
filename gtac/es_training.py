@@ -1,16 +1,3 @@
-"""
-TensorFlow-based Evolution Strategies (ES) implementation for Circuit Transformer fine-tuning.
-
-This module adapts the ES algorithm from the paper "Evolution Strategies at Scale: LLM Fine-Tuning Beyond Reinforcement Learning"
-to work with TensorFlow and circuit optimization tasks.
-
-Key adaptations:
-1. TensorFlow-based implementation instead of PyTorch
-2. Circuit-specific reward function instead of text-based rewards
-3. Integration with existing CircuitTransformer architecture
-4. Support for circuit optimization metrics (area, delay, error rate)
-"""
-
 import os
 import time
 import datetime

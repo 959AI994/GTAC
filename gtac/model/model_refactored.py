@@ -11,7 +11,7 @@ from .ppo_training import (
 
 
 class CircuitTransformerRefactored(CircuitTransformer):
-    """重构后的CircuitTransformer类，整合了所有拆分的方法"""
+    """Refactored CircuitTransformer class that integrates all split methods"""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -47,5 +47,5 @@ class CircuitTransformerRefactored(CircuitTransformer):
     _optimize_batch_with_ppo_policy = _optimize_batch_with_ppo_policy
 
 
-# 为了向后兼容，提供一个别名
+# Provide an alias for backward compatibility
 CircuitTransformer = CircuitTransformerRefactored 

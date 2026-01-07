@@ -5,7 +5,7 @@ import tensorflow as tf
 import tf_keras as keras
 import tracemalloc
 from gtac.utils import MPDataset
-# 导入必要的函数
+# Import necessary functions
 from gtac.tensorflow_transformer import masked_loss, masked_accuracy
 
 def train(self,
@@ -77,14 +77,14 @@ def train(self,
                                               dtype=tf.bool)
         }, tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32)
     )
-    print("正在创建TensorFlow数据集...")
+    print("Creating TensorFlow dataset...")
     train_dataset = tf.data.Dataset.from_generator(mp_dataset.train_generator,
                                                    output_signature=output_signature) \
         .batch(batch_size).prefetch(tf.data.AUTOTUNE)
     validation_dataset = tf.data.Dataset.from_generator(mp_dataset.validation_generator,
                                                         output_signature=output_signature) \
         .batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    print("数据集创建完成")
+    print("Dataset creation completed")
     
     if profile:
         if not os.path.exists(log_dir):
@@ -123,7 +123,7 @@ def train(self,
             print(f"Batch {batch} finished with logs: {logs}")
             # step = transformer.optimizer.iterations.numpy()
             # with summary_writer.as_default():
-            #     # 写入损失和准确率
+            #     # Write loss and accuracy
             #     tf.summary.scalar('loss', logs['loss'], step=batch)
             #     tf.summary.scalar('accuracy', logs['accuracy'], step=batch)
             # pass
@@ -144,7 +144,7 @@ def train(self,
             save_freq=(len(mp_dataset) * (epochs - initial_epoch) // batch_size) if latest_ckpt_only else 'epoch') # type: ignore
         callbacks.append(checkpoint)
 
-    print("开始训练，准备调用 fit() 方法")
+    print("Starting training, preparing to call fit() method")
     transformer.fit(train_dataset,
                     initial_epoch=initial_epoch,
                     epochs=epochs,
@@ -155,7 +155,7 @@ def train(self,
     print("training finished")
 
     if profile:
-        # 简单的profiling，不使用trace_export
+        # Simple profiling without using trace_export
         print("Profiling completed. Check log directory for TensorBoard logs.")
 
     self._transformer.return_cache = True 

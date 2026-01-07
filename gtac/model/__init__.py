@@ -1,5 +1,5 @@
-# Model模块初始化文件
-# 重构后的CircuitTransformer模型组件
+# Model module initialization file
+# Refactored CircuitTransformer model components
 
 from .core import CircuitTransformer
 from .training import train
@@ -11,6 +11,7 @@ from .ppo_training import (
     _update_value_function, _log_prob, _batch_step, value_forward_pass, policy_forward_pass
 )
 from .model_refactored import CircuitTransformerRefactored
+from .error_metrics import ErrorMetrics, compute_error_rate, compute_mred, compute_mse
 
 __all__ = [
     'CircuitTransformer',
@@ -18,5 +19,9 @@ __all__ = [
     'train',
     'optimize',
     'optimize_batch',
-    'train_ppo'
+    'train_ppo',
+    'ErrorMetrics',
+    'compute_error_rate',
+    'compute_mred',
+    'compute_mse'
 ] 

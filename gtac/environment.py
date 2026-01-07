@@ -59,7 +59,7 @@ class LogicNetworkEnv:
         self.max_inference_reward = max_inference_reward
         self.and_always_available = and_always_available
         self.use_controllability_dont_cares = use_controllability_dont_cares
-        self.unfinished_penalty = -1  # 降低未完成惩罚，避免过度惩罚
+        self.unfinished_penalty = -1  # Reduce unfinished penalty to avoid excessive punishment
         self.verbose = verbose
         self.error_rate_threshold = error_rate_threshold
         self.current_outputs_tt = {}        # record computed root tt
@@ -123,8 +123,8 @@ class LogicNetworkEnv:
         return self.gen_eos
 
     def reset(self, **kwargs):
-        """重置环境到初始状态"""
-        # 初始化状态变量
+        """Reset environment to initial state"""
+        # Initialize state variables
         self.roots = []
         self.tokens = []
         self.positional_encodings = []
@@ -136,7 +136,7 @@ class LogicNetworkEnv:
         self.rewards = []
         self.cur_root_id = 0
         
-        # 初始化真值表缓存
+        # Initialize truth table cache
         self.tt_cache_bitarray = {Node(i // 2, None, None): v
                                  for i, v in enumerate(self.input_tt_bitarray) if i % 2 == 0}
         self.tt_hash_bitarray = {v.tobytes(): node for node, v in self.tt_cache_bitarray.items()}
@@ -144,24 +144,24 @@ class LogicNetworkEnv:
         self.context_nodes = set()
         self.context_records = dict()
         
-        # 初始化care set（如果使用）
+        # Initialize care set (if used)
         if self.use_controllability_dont_cares:
             self.initialize_care_set_tt()
         
-        # 生成初始动作掩码
+        # Generate initial action mask
         self.action_masks.append(self.gen_action_mask())
         
         return self._get_obs()
 
     def _get_obs(self):
-        """获取当前观察值"""
-        # 填充序列到最大长度
+        """Get current observation"""
+        # Pad sequence to maximum length
         tokens = np.array(self.tokens + [self.PAD] * (self.max_length - len(self.tokens)), dtype=np.int32)
         pos_enc = np.zeros((self.max_length, self.max_tree_depth * 2), dtype=np.float32)
         if self.positional_encodings:
             pos_enc[:len(self.positional_encodings)] = np.array(self.positional_encodings)
         
-        # 当前动作掩码
+        # Current action mask
         action_mask = self.action_masks[-1] if self.action_masks else np.zeros(self.vocab_size, dtype=bool)
         return {
             'tokens': tokens,
@@ -374,15 +374,15 @@ class LogicNetworkEnv:
         return reward, done
 
     def ppo_step(self, action):
-        """PPO训练用的step方法"""
-        # 如果环境已结束，继续返回结束状态
+        """Step method for PPO training"""
+        # If environment has ended, continue returning terminal state
         if self.is_finished:
             return self._get_obs(), 0, True, {}
         
-        # 执行动作（使用原始step方法）
+        # Execute action (using original step method)
         reward, done = self.step(action)
-        
-        # 检查是否达到最大长度
+
+        # Check if maximum length reached
         if self.t >= self.max_length - 1 and not self.is_finished:
             done = True
             reward = self.unfinished_penalty

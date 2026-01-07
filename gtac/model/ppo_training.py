@@ -15,34 +15,34 @@ from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encodin
 
 
 def check_disk_space(min_space_gb=1.0):
-    """检查磁盘空间是否充足"""
+    """Check if disk space is sufficient"""
     try:
         stat = os.statvfs('.')
         available_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
         return available_gb >= min_space_gb, available_gb
     except:
-        return True, 0.0  # 如果检查失败，假设空间充足
+        return True, 0.0  # If check fails, assume space is sufficient
 
 
 def wait_for_disk_space(min_space_gb=1.0, max_wait_time=3600, check_interval=60):
-    """等待磁盘空间充足"""
+    """Wait for sufficient disk space"""
     start_time = time.time()
 
     while time.time() - start_time < max_wait_time:
         has_space, available_gb = check_disk_space(min_space_gb)
         if has_space:
-            print(f"磁盘空间充足 ({available_gb:.1f}GB)，继续训练")
+            print(f"Sufficient disk space ({available_gb:.1f}GB), continuing training")
             return True
 
-        print(f"磁盘空间不足 ({available_gb:.1f}GB < {min_space_gb}GB)，等待{check_interval}秒后重试...")
+        print(f"Insufficient disk space ({available_gb:.1f}GB < {min_space_gb}GB), retrying after {check_interval} seconds...")
         time.sleep(check_interval)
 
-    print(f"等待{max_wait_time}秒后磁盘空间仍不足，放弃等待")
+    print(f"Disk space still insufficient after waiting {max_wait_time} seconds, giving up")
     return False
 
 
 def safe_file_operation(operation_func, *args, **kwargs):
-    """安全执行文件操作，处理磁盘空间不足错误"""
+    """Safely execute file operation, handling disk space insufficient errors"""
     max_retries = 3
     retry_delay = 10
 
@@ -51,9 +51,9 @@ def safe_file_operation(operation_func, *args, **kwargs):
             return operation_func(*args, **kwargs)
         except OSError as e:
             if e.errno == errno.ENOSPC:  # No space left on device
-                print(f"磁盘空间不足，尝试第{attempt+1}次重试...")
+                print(f"Insufficient disk space, attempting retry {attempt+1}...")
                 if attempt < max_retries - 1:
-                    # 等待磁盘空间
+                    # Wait for disk space
                     if wait_for_disk_space(min_space_gb=2.0, max_wait_time=300, check_interval=30):
                         continue
                     else:
@@ -61,7 +61,7 @@ def safe_file_operation(operation_func, *args, **kwargs):
             else:
                 raise e
 
-    raise OSError("多次尝试后仍无法完成文件操作，可能磁盘空间持续不足")
+    raise OSError("Unable to complete file operation after multiple attempts, disk space may be persistently insufficient")
 
 
 def train_ppo(self,
@@ -86,7 +86,7 @@ def train_ppo(self,
               freeze_layers=True,           # Freeze layers (match train.py default)
               use_ppo_validation=True,
               ppo_train_epoch=2,            # PPO training epochs (match train.py default)
-              target_kl=0.01,               # Target KL divergence (降低以允许更多策略更新)
+              target_kl=0.01,               # Target KL divergence (reduced to allow more policy updates)
               w_area=1.4,        # Area weight (match train.py default)
               w_delay=0.3,       # Delay weight (match train.py default)
               w_error=0.3,       # Error weight (match train.py default)
@@ -113,7 +113,7 @@ def train_ppo(self,
     if log_file_name == "ppo_train_log.txt":  # Use default filename
         log_file_name = f"ppo_train_log_{timestamp}.txt"
     
-    # 修复日志文件路径问题：如果log_file_name已经包含完整路径，则直接使用；否则添加log/前缀
+    # Fix log file path issue: if log_file_name already contains full path, use it directly; otherwise add log/ prefix
     if log_file_name.startswith("log/") or "/" in log_file_name:
         log_file_path = log_file_name
     else:
@@ -165,8 +165,8 @@ def train_ppo(self,
 
     safe_file_operation(write_training_params)
 
-    # import tensorflow as tf  # 移除局部导入，使用全局导入
-    
+    # import tensorflow as tf  # Remove local import, use global import
+
     if ckpt_save_path is None:
         # Generate timestamp-based checkpoint path automatically
         base_ckpt_dir = "ckpt"
@@ -230,22 +230,22 @@ def train_ppo(self,
             del self._training_action_masks
         
         # Calculate dynamic temperature for this epoch
-        base_temperature = 1.5  # 与训练时固定温度保持一致
-        min_temperature = 1.2  # 提高最低温度，保持更好的探索能力
+        base_temperature = 1.5  # Keep consistent with fixed temperature during training
+        min_temperature = 1.2  # Raise minimum temperature to maintain better exploration
         max_temperature = 1.5
-        decay_rate = 0.9995  # 放缓衰减速度
+        decay_rate = 0.9995  # Slow down decay rate
         current_temperature = max(min_temperature, base_temperature * (decay_rate ** epoch))
 
         # Calculate dynamic learning rate based on temperature
-        # 使用更保守的学习率衰减策略
+        # Use more conservative learning rate decay strategy
         base_lr = policy_lr  # Use the original learning rate as base
-        # 前200个epoch保持较高学习率，第200个epoch后开始衰减
+        # Keep higher learning rate for first 200 epochs, start decay after epoch 200
         if epoch < 200:
             lr_scale = 1.0
         else:
-            # 后200个epoch缓慢衰减，从1.0衰减到0.8
-            progress = (epoch - 200) / 200  # 0到1
-            lr_scale = 1.0 - 0.2 * progress  # 从1.0衰减到0.8
+            # Slowly decay for last 200 epochs, from 1.0 to 0.8
+            progress = (epoch - 200) / 200  # 0 to 1
+            lr_scale = 1.0 - 0.2 * progress  # Decay from 1.0 to 0.8
         current_policy_lr = base_lr * lr_scale
         
         print(f"Current temperature: {current_temperature:.2f}, Policy LR: {current_policy_lr:.2e}")
@@ -455,7 +455,7 @@ def train_ppo(self,
                         
                         # check if circuit is complete
                         if envs[k].success and len(envs[k].roots) == envs[k].num_outputs:
-                            # calculate comprehensive reward: include area, delay, error rate
+                            # Calculate comprehensive reward: include area, delay, error rate
                             final_reward = self._calculate_comprehensive_reward(
                                 envs[k].roots, aigs[k], baseline_rewards[k], error_rate_tolerance[0],
                                 w_area, w_delay, w_error, log_file=log_file
@@ -463,7 +463,7 @@ def train_ppo(self,
                             # Count successful circuit
                             completed_circuits += 1
                         else:
-                            # circuit is incomplete, give severe punishment
+                            # Circuit is incomplete, give severe punishment
                             final_reward = -1.0
                             print(f"Circuit incomplete[{k}]: success={envs[k].success}, roots={len(envs[k].roots)}, outputs={envs[k].num_outputs}, reward = -1.0")
                         ep[-1]['reward'] = final_reward
@@ -556,7 +556,7 @@ def train_ppo(self,
             log_file.write(f"Epoch {epoch+1}/{epochs} | Circuit completion rate: {circuit_completion_rate:.1f}% ({completed_circuits}/{num_episodes} circuits)\n")
         safe_file_operation(write_completion_rate)
         
-        # monitor reward range and completion rate (using GAE returns and advantages)
+        # Monitor reward range and completion rate (using GAE returns and advantages)
         if returns_proc is not None and len(returns_proc) > 0 and advantages_proc is not None and len(advantages_proc) > 0:
             returns_array = np.array(returns_proc)
             advantages_array = np.array(advantages_proc)
@@ -655,7 +655,7 @@ def train_ppo(self,
         if (epoch + 1) % 5 == 0:
             log_file.flush()
         
-        # clear processed data, release memory
+        # Clear processed data, release memory
         del states_proc, actions_proc, old_log_probs_proc, returns_proc, advantages_proc
         # Clean up all large variables in the training loop
         del envs, aigs, encoded_aigs, enc_action_masks, seq_enc, pos_enc
@@ -712,19 +712,19 @@ def train_ppo(self,
             pass
 
 
-        # validation - reduce frequency to avoid GPU idle time
+        # Validation - reduce frequency to avoid GPU idle time
         val_area = []
         val_original_ands = []
         val_aigs = []
         val_err = []
         val_delay = []
         val_original_delay = []
-        # import tensorflow as tf  # 移除局部导入，使用全局导入
+        # import tensorflow as tf  # Remove local import, use global import
         tf.config.run_functions_eagerly(True)
         try:
             # Only validate every 10 epochs to prevent OOM
             if val_data_dir is not None and (epoch + 1) % max(1, validation_frequency) == 0:
-                # clear validation set data, avoid accumulation
+                # Clear validation set data, avoid accumulation
                 val_aigs.clear()
                 val_original_ands.clear()
                 for root, dirs, files in os.walk(val_data_dir):
@@ -769,16 +769,16 @@ def train_ppo(self,
                             
                             original_ands = val_original_ands[m]
                             optimized_ands = count_num_ands(optimized_aig)
-                            
-                            # calculate error rate, handle incomplete circuits
+
+                            # Calculate error rate, handle incomplete circuits
                             try:
                                 error_rate = checkER(original_aig, optimized_aig)
                             except (ValueError, AttributeError) as e:
-                                # if circuit is incomplete, set a high error rate
+                                # If circuit is incomplete, set a high error rate
                                 error_rate = 1.0
                                 # print(f"Validation: Circuit {m} incomplete, setting error_rate = 1.0")
-                            
-                            # calculate delay metrics
+
+                            # Calculate delay metrics
                             from circuit_transformer.utils import compute_critical_path
                             original_delay = compute_critical_path(original_aig)
                             optimized_delay = compute_critical_path(optimized_aig)
@@ -787,8 +787,8 @@ def train_ppo(self,
                             val_err.append(error_rate)
                             val_delay.append(optimized_delay)
                             val_original_delay.append(original_delay)
-                            
-                            # record optimization effect
+
+                            # Record optimization effect
                             # improvement = original_ands - optimized_ands
                             # if improvement > 0:
                             #     print(f"Circuit {m}: {original_ands} -> {optimized_ands} ANDs (improvement: {improvement})")
@@ -802,14 +802,14 @@ def train_ppo(self,
             avg_err = np.mean(val_err) if val_err else 0
             avg_delay_ori = np.mean(val_original_delay) if val_original_delay else 0
             avg_delay = np.mean(val_delay) if val_delay else 0
-            
-            # calculate optimization effect
+
+            # Calculate optimization effect
             total_area_improvement = avg_area_ori - avg_area
             area_improvement_rate = (total_area_improvement / avg_area_ori * 100) if avg_area_ori > 0 else 0
             total_delay_improvement = avg_delay_ori - avg_delay
             delay_improvement_rate = (total_delay_improvement / avg_delay_ori * 100) if avg_delay_ori > 0 else 0
-            
-            # statistics improvement
+
+            # Calculate improvement statistics
             area_improvements = [val_original_ands[i] - val_area[i] for i in range(len(val_area))]
             delay_improvements = [val_original_delay[i] - val_delay[i] for i in range(len(val_delay))]
             positive_area_improvements = [imp for imp in area_improvements if imp > 0]
@@ -854,7 +854,7 @@ def train_ppo(self,
                             def write_checkpoint_deleted():
                                 print(f"Deleted previous checkpoint: {self._current_checkpoint_path}")
                             safe_file_operation(write_checkpoint_deleted)
-                    
+
                     save_path = os.path.join(ckpt_save_path, f"model-{epoch+1:04d}")
                     self._transformer.save_weights(save_path)
                     self._current_checkpoint_path = save_path  # Track current checkpoint path
@@ -862,7 +862,7 @@ def train_ppo(self,
                         print(f"Model weights saved at {save_path} ({save_reason})")
                     safe_file_operation(write_checkpoint_saved)
 
-            # clear validation set related variables, prevent memory leaks
+            # Clear validation set related variables, prevent memory leaks
             if 'optimized_aigs' in locals():
                 del optimized_aigs
             if 'val_aigs' in locals():
@@ -900,15 +900,15 @@ def train_ppo(self,
                     del positive_delay_improvements
             except NameError:
                 pass  # Variable does not exist, ignore
-            
-            # clear GPU memory, prevent memory leaks
+
+            # Clear GPU memory, prevent memory leaks
             import gc
             gc.collect()
             
             # Note: Removed frequent clear_session to prevent performance degradation
             # Only clear session when memory usage is critically high
-            
-            # clear CUDA cache
+
+            # Clear CUDA cache
             try:
                 import torch
                 if torch.cuda.is_available():
@@ -918,7 +918,7 @@ def train_ppo(self,
             
             # Simple memory management: only clear session when absolutely necessary to prevent OOM
             try:
-                # import tensorflow as tf  # 移除局部导入，使用全局导入
+                # import tensorflow as tf  # Remove local import, use global import
                 gpu_devices = tf.config.list_physical_devices('GPU')
                 if gpu_devices:
                     gpu_memory_info = tf.config.experimental.get_memory_info('GPU:0')
@@ -942,8 +942,8 @@ def train_ppo(self,
                         def write_memory_cleanup():
                             log_file.write(f"Epoch {epoch+1}/{epochs} | Memory cleanup #{self._memory_cleanup_count} performed (memory: {current_mb:.1f}MB)\n")
                         safe_file_operation(write_memory_cleanup)
-                        
-                        # Force clean up CUDA cache
+
+                        # Force cleanup of CUDA cache
                         try:
                             import torch
                             if torch.cuda.is_available():
@@ -952,8 +952,8 @@ def train_ppo(self,
                             pass
             except Exception as e:
                 pass
-            
-            # monitor GPU memory usage
+
+            # Monitor GPU memory usage
             try:
                 gpu_devices = tf.config.list_physical_devices('GPU')
                 if gpu_devices:
@@ -964,8 +964,8 @@ def train_ppo(self,
                     def write_gpu_memory():
                         log_file.write(f"Epoch {epoch+1}/{epochs} | GPU Memory: {current_mb:.1f}MB current, {peak_mb:.1f}MB peak\n")
                     safe_file_operation(write_gpu_memory)
-                    
-                    # if memory usage exceeds 5GB, emit a warning
+
+                    # If memory usage exceeds 5GB, emit a warning
                     if current_mb > 5000:
                         print(f"WARNING: High GPU memory usage: {current_mb:.1f}MB")
                         def write_gpu_memory_warning():
@@ -974,8 +974,8 @@ def train_ppo(self,
                     log_file.flush()
             except Exception as e:
                 pass
-            
-        # clear environment variables and trajectory data
+
+        # Clear environment variables and trajectory data
         if 'envs' in locals():
             del envs
         if 'trajectories' in locals():
@@ -1049,27 +1049,27 @@ def train_ppo(self,
 
 
 def _circuit_iterator(self, circuit_files, seed=None):
-    """create infinite iterator for circuit files"""
+    """Create infinite iterator for circuit files"""
     while True:
-        # shuffle circuit files
+        # Shuffle circuit files
         np.random.shuffle(circuit_files)
         for circuit_file in circuit_files:
             yield circuit_file
 
 
 def _create_circuit_env(self, circuit_file, error_rate_threshold, w_area, w_delay, w_error):
-    """create environment for given circuit file"""
-    # read circuit
+    """Create environment for given circuit file"""
+    # Read circuit
     with open(circuit_file, 'r') as f:
         roots_aiger, num_ands, opt_roots_aiger, opt_num_ands = json.load(f)
-    
+
     roots, info = read_aiger(aiger_str=roots_aiger)
     num_inputs, num_outputs = info[1], info[3]
-    
-    # compute truth table
+
+    # Compute truth table
     tts = compute_tts(roots, num_inputs=num_inputs)
-    
-    # create environment
+
+    # Create environment
     return LogicNetworkEnv(
         tts=tts,
         num_inputs=num_inputs,
@@ -1226,18 +1226,18 @@ def _prepare_batch_input(self, states):
 
 
 def _sample_action(self, logits, mask, seed=None):
-    """sample action based on logits and mask"""
-    # apply mask to logits (set logits of non-actionable actions to minimum value)
+    """Sample action based on logits and mask"""
+    # Apply mask to logits (set logits of non-actionable actions to minimum value)
     masked_logits = np.where(mask, logits, np.finfo(np.float32).min)
-    
-    # calculate softmax
+
+    # Calculate softmax
     probs = np.exp(masked_logits - np.max(masked_logits))
     probs /= np.sum(probs)
     probs = np.squeeze(probs)
-    # sample action
+    # Sample action
     action = np.random.choice(len(probs), p=probs)
     log_prob = np.log(probs[action])
-    
+
     return action, log_prob
 
 
@@ -1478,7 +1478,7 @@ def _optimize_batch_with_ppo_policy(self, aigs, error_rate_threshold=0.1, seed=N
 
 
 def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epoch=None, epochs=None):  # Reduce lambda to decrease advantage function variance
-    """process trajectory data, calculate return and advantage function"""
+    """Process trajectory data, calculate return and advantage function"""
     states = []
     actions = []
     old_log_probs = []
@@ -1490,7 +1490,7 @@ def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epo
     
     total_steps = 0
     for episode_idx, (episode, env_idx) in enumerate(trajectories):
-        # extract trajectory data
+        # Extract trajectory data
         episode_states = [step['state'] for step in episode]
         episode_actions = [step['action'] for step in episode]
         episode_rewards = [step['reward'] for step in episode]
@@ -1499,25 +1499,25 @@ def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epo
         episode_dones = [step['done'] for step in episode]
         
         total_steps += len(episode_states)
-        
-        # ensure data type consistency and prevent gradient flow
+
+        # Ensure data type consistency and prevent gradient flow
         episode_rewards = [float(tf.stop_gradient(r).numpy() if hasattr(r, 'numpy') else r) for r in episode_rewards]
         episode_values = [float(tf.stop_gradient(v).numpy() if hasattr(v, 'numpy') else v) for v in episode_values]
         episode_log_probs = [float(tf.stop_gradient(lp).numpy() if hasattr(lp, 'numpy') else lp) for lp in episode_log_probs]
-        
-        # calculate Monte Carlo return
+
+        # Calculate Monte Carlo return
         R = 0.0
         discounted_returns = []
         for r in reversed(episode_rewards):
             R = r + gamma * R
             discounted_returns.insert(0, R)
-        
-        # calculate Generalized Advantage Estimation (GAE)
+
+        # Calculate Generalized Advantage Estimation (GAE)
         advantages_ep = []
         last_gae = 0.0
         next_value = 0.0
-        next_done = True  # assume episode ends when done=True
-        
+        next_done = True  # Assume episode ends when done=True
+
         for t in reversed(range(len(episode))):
             if t == len(episode) - 1:
                 next_non_terminal = 1.0 - float(next_done)
@@ -1530,15 +1530,15 @@ def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epo
             gae = delta + gamma * lam * next_non_terminal * last_gae
             last_gae = gae
             advantages_ep.insert(0, gae)
-        
-        # standardize advantage function
+
+        # Standardize advantage function
         advantages_ep = np.array(advantages_ep, dtype=np.float32)
         # if advantages_ep.std() > 0:
         advantages_ep = (advantages_ep - advantages_ep.mean()) / (advantages_ep.std() + 1e-8)
         # Further limit advantage function range to avoid extreme values
         advantages_ep = np.clip(advantages_ep, -3.0, 3.0)
-        
-        # add to result list
+
+        # Add to result list
         states.extend(episode_states)
         actions.extend(episode_actions)
         old_log_probs.extend(episode_log_probs)
@@ -1558,7 +1558,7 @@ def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epo
     
     print(f"Processed {len(trajectories)} episodes, total {total_steps} steps")
     print(f"Average steps per episode: {total_steps / len(trajectories):.1f}")
-    
+
     # Monitor advantage function range
     if advantages:
         advantages_array = np.array(advantages)
@@ -1582,7 +1582,7 @@ def _process_trajectories(self, trajectories, gamma, lam=0.8, log_file=None, epo
 
 def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch, log_file=None, epoch=None, epochs=None):
     """
-    avoid creating recursive @tf.function to avoid retracing.
+    Avoid creating recursive @tf.function to avoid retracing.
     - states: list of state dicts
     - actions, old_log_probs, advantages: list/np arrays
     """
@@ -1613,14 +1613,14 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
         advantages_tensor
     )).shuffle(len(actions), reshuffle_each_iteration=True).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-    # filter out policy variables (not including value head)
+    # Filter out policy variables (not including value head)
     policy_vars = [v for v in self._transformer.trainable_variables if 'value_head' not in v.name]
 
-    # define (and cache) train step in graph mode (only once)
+    # Define (and cache) train step in graph mode (only once)
     if not hasattr(self, "_policy_train_step_fn") or self._policy_train_step_fn is None:
         @tf.function(reduce_retracing=True)
         def _policy_train_step(inputs_tokens, enc_pos, enc_action_mask, targets, dec_pos, batch_action_masks, batch_actions, batch_old_log_probs, batch_advantages):
-            # construct model inputs dict matching your call signature
+            # Construct model inputs dict matching your call signature
             model_inputs = {
                 'inputs': inputs_tokens,
                 'enc_pos_encoding': enc_pos,
@@ -1645,14 +1645,14 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
                 # If enc_action_mask is 3D, take the last time step
                 # if tf.rank(enc_action_mask) == 3:
                 enc_action_mask = enc_action_mask[:, -1, :]  # shape [B, V]
-                # log prob - Keep calculation method completely consistent with sampling
+                # Log prob - Keep calculation method completely consistent with sampling
                 # 1. Manual numerical stability processing (consistent with sampling)
                 logits_max = tf.reduce_max(logits, axis=-1, keepdims=True)
                 logits_shifted = logits - logits_max
                 probs = tf.exp(logits_shifted)
                 probs_sum = tf.reduce_sum(probs, axis=-1, keepdims=True)
                 probs = probs / (probs_sum + 1e-12)
-                
+
                 # 2. Calculate log probability (completely consistent with sampling)
                 # Directly take the probability of selected action, not one-hot weighted
                 batch_size = tf.shape(batch_actions)[0]
@@ -1660,13 +1660,13 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
                 indices = tf.stack([batch_indices, batch_actions], axis=1)
                 selected_probs = tf.gather_nd(probs, indices)
                 new_log_probs = tf.math.log(selected_probs + 1e-12)
-            
+
                 # Calculate log probability difference with numerical stability
                 log_prob_diff = new_log_probs - batch_old_log_probs
                 # Clip log probability difference to prevent exponential explosion
                 log_prob_diff_clipped = tf.clip_by_value(log_prob_diff, -1.0, 1.0)  # Prevents exp() overflow
                 ratio = tf.exp(log_prob_diff_clipped)
-                
+
                 # Monitor ratio range to avoid overly aggressive policy updates
                 ratio_mean = tf.reduce_mean(ratio)
                 ratio_max = tf.reduce_max(ratio)
@@ -1820,7 +1820,7 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
 
 def _update_value_function(self, inputs_batch, returns, optimizer, batch_size, ppo_train_epoch):
     """
-    update value head (MSE), avoid retracing.
+    Update value head (MSE), avoid retracing.
     - states: list of state dicts
     - returns: list/np array
     """
@@ -1840,14 +1840,14 @@ def _update_value_function(self, inputs_batch, returns, optimizer, batch_size, p
         returns_tensor
     )).shuffle(len(returns)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-    # value vars: assume value_head is named 'value_head' in transformer
+    # Value vars: assume value_head is named 'value_head' in transformer
     try:
         value_vars = self._transformer.value_head.trainable_variables
     except Exception:
-        # fallback: filter out variables with name containing 'value' in all trainable variables  
+        # Fallback: filter out variables with name containing 'value' in all trainable variables
         value_vars = [v for v in self._transformer.trainable_variables if 'value' in v.name]
 
-    # define and cache value train step
+    # Define and cache value train step
     if not hasattr(self, "_value_train_step_fn") or self._value_train_step_fn is None:
         @tf.function(reduce_retracing=True)
         def _value_train_step(inputs_tokens, enc_pos, enc_action_mask, targets, dec_pos, dec_action_mask, batch_returns):
@@ -1863,7 +1863,7 @@ def _update_value_function(self, inputs_batch, returns, optimizer, batch_size, p
                 _, pack = self._transformer(model_inputs, training=False, return_last_token=True, return_value=True)
                 values = pack['value']
                 values = tf.cast(values, tf.float32)  # [B, 1] or [B]
-                # ensure shape [B]
+                # Ensure shape [B]
                 values_flat = tf.reshape(values, [-1])
                 returns_flat = tf.cast(batch_returns, tf.float32)
                 
@@ -1905,7 +1905,7 @@ def _update_value_function(self, inputs_batch, returns, optimizer, batch_size, p
 
 
 def _log_prob(self, logits, actions):
-    """calculate log probability of given actions"""
+    """Calculate log probability of given actions"""
     logits = tf.cast(logits, tf.float32)
 
     # Use same softmax computation as during sampling and training
@@ -1916,19 +1916,19 @@ def _log_prob(self, logits, actions):
     probs_sum = tf.reduce_sum(probs, axis=-1, keepdims=True)
     probs = probs / (probs_sum + 1e-12)
 
-    # create one-hot encoding of actions
+    # Create one-hot encoding of actions
     actions_one_hot = tf.one_hot(actions, depth=self.vocab_size, dtype=tf.float32)
 
-    # calculate log probability
+    # Calculate log probability
     return tf.math.log(tf.reduce_sum(probs * actions_one_hot, axis=-1) + 1e-10)
 
 
 def _batch_step(self, envs, actions):
-    """batch execute environment steps (vectorized operation)"""
+    """Batch execute environment steps (vectorized operation)"""
     next_states = []
     rewards = []
     dones = []
-    
+
     for env, action in zip(envs, actions):
         next_state, reward, done, _ = env.ppo_step(action)
         next_states.append(next_state)
@@ -1940,42 +1940,42 @@ def _batch_step(self, envs, actions):
 
 @tf.function(reduce_retracing=True)
 def value_forward_pass(self, inputs, returns):
-    """value network forward pass (graph mode)"""
-    # predict value
+    """Value network forward pass (graph mode)"""
+    # Predict value
     _, pack = self._transformer(inputs, training=True, return_value=True)
     values = pack['value']
-    # ensure data type consistency - convert values to float32
+    # Ensure data type consistency - convert values to float32
     values = tf.cast(values, tf.float32)
     returns = tf.cast(returns, tf.float32)
-    
-    # calculate value loss
+
+    # Calculate value loss
     return tf.reduce_mean(tf.square(returns - values))
 
 
 @tf.function(reduce_retracing=True)
 def policy_forward_pass(self, inputs, actions, old_log_probs, advantages, clip_ratio):
-    """policy network forward pass (graph mode)"""
-    # get policy network output
+    """Policy network forward pass (graph mode)"""
+    # Get policy network output
     logits, _ = self._transformer(inputs, training=True, return_value=True)
-    
-    # ensure logits is float32 type
+
+    # Ensure logits is float32 type
     logits = tf.cast(logits, tf.float32)
-    
-    # calculate log probability of new policy
+
+    # Calculate log probability of new policy
     new_log_probs = self._log_prob(logits, actions)
-    
-    # ensure all tensors are float32 type
+
+    # Ensure all tensors are float32 type
     new_log_probs = tf.cast(new_log_probs, tf.float32)
     old_log_probs = tf.cast(old_log_probs, tf.float32)
     advantages = tf.cast(advantages, tf.float32)
-    
-    # calculate PPO loss
+
+    # Calculate PPO loss
     ratio = tf.exp(new_log_probs - old_log_probs)
     surr1 = ratio * advantages
     surr2 = tf.clip_by_value(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
     policy_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))
-    
-    # calculate KL divergence using Schulman (2020) approximation
+
+    # Calculate KL divergence using Schulman (2020) approximation
     # KL[θ_FT || θ_BASE] = Σ(r - log(r) - 1) where r = p_old/p_new
     # Convert log probabilities to probabilities
     old_probs = tf.exp(old_log_probs)
@@ -2017,11 +2017,11 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
     # Calculate optimized metrics
     optimized_area = count_num_ands(optimized_roots)
     optimized_delay = compute_critical_path(optimized_roots)
-    
+
     # Calculate original circuit metrics
     original_area = count_num_ands(original_roots)
     original_delay = compute_critical_path(original_roots)
-    
+
     # Calculate error rate, handle incomplete circuits
     try:
         error_rate = checkER(original_roots, optimized_roots)
@@ -2029,7 +2029,7 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
         # If circuit is incomplete (contains None nodes), give severe penalty
         # print(f"Circuit incomplete (None nodes detected), reward = -1.0")
         return -1.0
-    
+
     # Check if error rate exceeds threshold
     # if error_rate > error_rate_threshold:
     #     # If error exceeds threshold, give severe penalty
@@ -2041,7 +2041,7 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
         baseline_area_stopped = tf.stop_gradient(tf.constant(baseline_area, dtype=tf.float32))
         area_improvement = baseline_area_stopped - optimized_area  # Compare with baseline
         delay_improvement = original_delay - optimized_delay  # Compare with original circuit
-        
+
         # Normalize improvements (avoid division by zero)
         # Use tf.stop_gradient for normalization to prevent gradient flow
         baseline_area_norm = tf.stop_gradient(tf.constant(max(baseline_area, 1), dtype=tf.float32))
@@ -2064,7 +2064,7 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
         
         # Convert to numpy for return
         final_reward = float(final_reward.numpy())
-        
+
         # Debug info: show reward breakdown
         if final_reward > 0.3:  # Print medium and above reward cases
             raw_reward = w_area * area_reward + w_delay * delay_reward + w_error * error_reward

@@ -31,7 +31,16 @@ import sys
 # replace your path
 sys.path.append('./')
 
-from tensorflow_models import nlp
+from tensorflow._models import nlp
+
+
+
+
+
+
+
+
+
 from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
 from gtac.utils import *
 # from tensorflow.keras.optimizers import Adam
@@ -136,7 +145,6 @@ class LogicNetworkEnv:
                  context_num_inputs=None,
                  input_tt=None,
                  init_care_set_tt=None,                 # for the first output (which can be computed in advance) or for all the outputs (list[num_outputs])
-                 init_care_set_tt=None,                 # for the first output (which can be computed in advance) or for all the outputs (list[num_outputs])
                  max_tree_depth=32,
                  max_inference_tree_depth=16,
                  max_inference_reward=None,
@@ -146,14 +154,9 @@ class LogicNetworkEnv:
                  context_hash: set = None,
                  ffw = None,
                  and_always_available=False,            # for training
-                 and_always_available=False,            # for training
                  use_controllability_dont_cares=True,   # Patterns that cannot happen at inputs to a network node.
                  tts_compressed=None,                   # must specify when `use_controllability_dont_cares` = False, the truth table of 2^num_inputs corresponding to the "local" aig
                  verbose=0,
-                 error_rate_threshold = 0.05,           # for approximate 
-                 w_gate = 1,
-                 w_delay = 1,
-                 w_error = 1
                  error_rate_threshold = 0.05,           # for approximate 
                  w_gate = 1,
                  w_delay = 1,
@@ -623,9 +626,8 @@ class LogicNetworkEnv:
                 else:
                     cur_node.right = node
             has_conflict_ba, completeness_ba = check_conflict(self.tree_stack, self.tts_bitarray_compressed[self.cur_root_id], ####################check conflict
-                                                              self.input_tt_bitarray_compressed, self.tt_cache_bitarray_compressed, tolerance=error_rate_threshold)
+                                                              self.input_tt_bitarray_compressed, self.tt_cache_bitarray_compressed, tolerance=self.error_rate_threshold)
             value_action_mask_ba = ~has_conflict_ba
-            action_mask_ba[2: 2 + len(value_action_mask_ba)] = value_action_mask_ba             # PAD: 0, EOS:1
             action_mask_ba[2: 2 + len(value_action_mask_ba)] = value_action_mask_ba             # PAD: 0, EOS:1
             if self.and_always_available:
                 action_mask_ba[2 + self.num_inputs * 2: 4 + self.num_inputs * 2] = bitarray.bitarray('11')
@@ -704,12 +706,8 @@ class CircuitTransformer:
                  policy_temperature_in_mcts=1.,
                  w_gate=1,
                  w_delay=0
-                 policy_temperature_in_mcts=1.,
-                 w_gate=1,
-                 w_delay=0
                  ):
         self.num_inputs = num_inputs
-        self.vocab_size = 2 + 2 * self.num_inputs + 2 + 2
         self.vocab_size = 2 + 2 * self.num_inputs + 2 + 2
         self.embedding_width = embedding_width
         self.num_layers = num_layers
@@ -740,10 +738,10 @@ class CircuitTransformer:
         self._transformer = self._get_tf_transformer()
 
         if self.ckpt_path is not None:
-            # self.build_model()  # 先构建模型变量
-            self.load(self.ckpt_path)  # 再加载权重
-            # self.build_model()  # 先构建模型变量
-            self.load(self.ckpt_path)  # 再加载权重
+            # self.build_model()  # First build model variables
+            self.load(self.ckpt_path)  # Then load weights
+            # self.build_model()  # First build model variables
+            self.load(self.ckpt_path)  # Then load weights
 
         @tf.function(reduce_retracing=True)
         def _transformer_inference_graph(self, inputs, return_kv_cache=False, return_last_token=False):
@@ -823,7 +821,6 @@ class CircuitTransformer:
 
     def _get_tf_transformer(self):
         transformer = Seq2SeqTransformer(
-        transformer = Seq2SeqTransformer(
             enc_vocab_size=self.vocab_size,
             dec_vocab_size=self.vocab_size,
             embedding_width=self.embedding_width,
@@ -841,13 +838,6 @@ class CircuitTransformer:
             max_tree_depth=self.max_tree_depth,
             add_action_mask_to_inputs=self.add_action_mask_to_input
         )
-
-        if self.freeze_encoder:
-            transformer.encoder_layer.trainable = False
-            transformer.enc_embedding_lookup.trainable = False
-            transformer.position_embedding.trainable = False
-            transformer.tree_position_embedding.trainable = False
-        return transformer
 
         if self.freeze_encoder:
             transformer.encoder_layer.trainable = False
@@ -1288,8 +1278,6 @@ class CircuitTransformer:
               log_dir='tensorboard',
               excluded_files: list = None,
               freeze_layers=False
-              excluded_files: list = None,
-              freeze_layers=False
               ):
         train_data_dir = train_data_dir + ("/" if train_data_dir[-1] != "/" else "")
         
@@ -1339,7 +1327,7 @@ class CircuitTransformer:
                 'inputs': tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32),
                 'enc_pos_encoding': tf.TensorSpec(shape=(self.max_seq_length, self.max_tree_depth * 2),
                                                   dtype=tf.float32),
-                'targets': tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32), #######################################输入了target
+                'targets': tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32), ####################################### Target input
                 'dec_pos_encoding': tf.TensorSpec(shape=(self.max_seq_length, self.max_tree_depth * 2),
                                                   dtype=tf.float32),
                 'enc_action_mask': tf.TensorSpec(shape=(self.max_seq_length, self.vocab_size),
@@ -1425,7 +1413,7 @@ class CircuitTransformer:
         print("training finished")
 
         if profile:
-            # 简单的profiling，不使用trace_export
+            # Simple profiling, not using trace_export
             print("Profiling completed. Check log directory for TensorBoard logs.")
 
         self._transformer.return_cache = True
@@ -1617,23 +1605,23 @@ class CircuitTransformer:
         elif len(action_mask.shape) == 3:  # [1, seq_len, vocab_size]
             enc_action_mask = tf.expand_dims(action_mask, axis=2)  # [1, seq_len, 1, vocab_size]
         else:
-            enc_action_mask = action_mask  # 已经是正确的形状
-        
-        # 处理 targets - 使用最后一个token，确保形状为 [batch, 1]
+            enc_action_mask = action_mask  # Already in correct shape
+
+        # Process targets - use last token, ensure shape is [batch, 1]
         if tf.shape(inputs)[1] > 0:
-            last_token = inputs[0, -1]  # 获取最后一个token
+            last_token = inputs[0, -1]  # Get the last token
             targets = tf.expand_dims(tf.expand_dims(last_token, axis=0), axis=0)  # [1, 1]
         else:
             targets = tf.zeros((1, 1), dtype=tf.int32)
-        
-        # 处理 dec_pos_encoding - 使用最后一个位置编码，确保形状为 [batch, 1, features]
+
+        # Process dec_pos_encoding - use last position encoding, ensure shape is [batch, 1, features]
         if tf.shape(enc_pos_encoding)[1] > 0:
-            last_pos_enc = enc_pos_encoding[0, -1, :]  # 获取最后一个位置编码
+            last_pos_enc = enc_pos_encoding[0, -1, :]  # Get the last position encoding
             dec_pos_encoding = tf.expand_dims(tf.expand_dims(last_pos_enc, axis=0), axis=0)  # [1, 1, features]
         else:
             dec_pos_encoding = tf.zeros((1, 1, self.max_tree_depth * 2), dtype=tf.float32)
-        
-        # 处理 dec_action_mask - 使用当前动作掩码，确保形状为 [batch, 1, 1, vocab_size]
+
+        # Process dec_action_mask - use current action mask, ensure shape is [batch, 1, 1, vocab_size]
         if len(state['action_mask'].shape) == 1:  # [vocab_size]
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(state['action_mask'], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         else:
@@ -1762,8 +1750,8 @@ class CircuitTransformer:
             advantages_ep = []
             last_gae = 0.0
             next_value = 0.0
-            next_done = True  # 假设episode结束时done=True
-            
+            next_done = True  # Assume done=True when episode ends
+
             for t in reversed(range(len(episode))):
                 if t == len(episode) - 1:
                     next_non_terminal = 1.0 - float(next_done)
@@ -1771,18 +1759,18 @@ class CircuitTransformer:
                 else:
                     next_non_terminal = 1.0 - float(episode_dones[t+1])
                     next_value = episode_values[t+1]
-                
+
                 delta = episode_rewards[t] + gamma * next_value * next_non_terminal - episode_values[t]
                 gae = delta + gamma * lam * next_non_terminal * last_gae
                 last_gae = gae
                 advantages_ep.insert(0, gae)
-            
-            # 标准化优势函数
+
+            # Normalize advantage function
             advantages_ep = np.array(advantages_ep, dtype=np.float32)
             if advantages_ep.std() > 0:
                 advantages_ep = (advantages_ep - advantages_ep.mean()) / (advantages_ep.std() + 1e-8)
-            
-            # 添加到结果列表
+
+            # Add to result list
             states.extend(episode_states)
             actions.extend(episode_actions)
             old_log_probs.extend(episode_log_probs)
@@ -1794,20 +1782,20 @@ class CircuitTransformer:
 
 
     def _update_policy(self, states, actions, old_log_probs, advantages, optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch):
-        """更新策略网络"""
+        """Update policy network"""
         @tf.function(reduce_retracing=True)
         def train_step(batch_inputs, batch_actions, batch_old_log_probs, batch_advantages, policy_vars):
             with tf.GradientTape() as tape:
                 policy_loss, kl, _ = self.policy_forward_pass(
-                    batch_inputs, 
-                    batch_actions, 
-                    batch_old_log_probs, 
+                    batch_inputs,
+                    batch_actions,
+                    batch_old_log_probs,
                     batch_advantages,
                     clip_ratio
                 )
             grads = tape.gradient(policy_loss, policy_vars)
             return grads, policy_loss, kl
-        # 创建数据集（仅第一次）
+        # Create dataset (first time only)
         if not hasattr(self, 'policy_dataset') or self.policy_dataset is None:
             dataset = tf.data.Dataset.from_tensor_slices({
                 'tokens': tf.stack([s['tokens'] for s in states]),
@@ -1820,17 +1808,17 @@ class CircuitTransformer:
             self.policy_dataset = dataset
         else:
             dataset = self.policy_dataset
-        
-        # 获取策略网络变量
+
+        # Get policy network variables
         policy_vars = [var for var in self._transformer.trainable_variables if 'value_head' not in var.name]
-        
+
         total_policy_loss = 0
         total_kl = 0
         num_batches = 0
-        
+
         for ppo_epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 准备输入
+                # Prepare inputs
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
@@ -1839,8 +1827,8 @@ class CircuitTransformer:
                     batch['tokens'], batch['pos_enc'], batch['action_mask']
                 )]
                 inputs = self._prepare_batch_input(batch_states)
-                
-                # 使用预定义计算图执行训练步骤
+
+                # Execute training step using predefined computation graph
                 grads, policy_loss, kl = train_step(
                     inputs,
                     batch['actions'],
@@ -1848,69 +1836,69 @@ class CircuitTransformer:
                     batch['advantages'],
                     policy_vars
                 )
-                
-                # 应用梯度
+
+                # Apply gradients
                 if grads is not None:
                     grads, _ = tf.clip_by_global_norm(grads, 1.0)
                     optimizer.apply_gradients(zip(grads, policy_vars))
-                
+
                 total_policy_loss += policy_loss
                 total_kl += kl
                 num_batches += 1
-                
-                # 检查KL散度
+
+                # Check KL divergence
                 if total_kl / num_batches > 1.5 * target_kl:
                     print(f"Early stopping at KL divergence {total_kl/num_batches:.4f} > {1.5*target_kl:.4f}")
                     break
-        
-        # 清理资源
+
+        # Clean up resources
         K.clear_session()
         gc.collect()
         
         return total_policy_loss / num_batches
 
     def _update_value_function(self, states, returns, optimizer, batch_size, ppo_train_epoch):
-        """更新价值函数"""
-        # 创建数据集 - 使用 TensorFlow 操作
+        """Update value function"""
+        # Create dataset - using TensorFlow operations
         dataset = tf.data.Dataset.from_tensor_slices({
             'tokens': tf.stack([s['tokens'] for s in states]),
             'pos_enc': tf.stack([s['positional_encodings'] for s in states]),
             'action_mask': tf.stack([s['action_mask'] for s in states]),
             'returns': tf.convert_to_tensor(returns, dtype=tf.float32)
         })
-        
-        # 应用批处理和预取
+
+        # Apply batching and prefetching
         dataset = dataset.shuffle(len(states)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        
+
         total_value_loss = 0
         num_batches = 0
-        
-        # 获取价值网络变量
+
+        # Get value network variables
         value_vars = self._transformer.value_head.trainable_variables
         for epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 使用修改后的 _prepare_batch_input 准备输入
+                # Prepare inputs using modified _prepare_batch_input
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
                     'action_mask': action_mask
                 } for tokens, pos_enc, action_mask in zip(
-                    batch['tokens'], 
-                    batch['pos_enc'], 
+                    batch['tokens'],
+                    batch['pos_enc'],
                     batch['action_mask']
                 )]
                 inputs = self._prepare_batch_input(batch_states)
-                
-                # 准备参数
+
+                # Prepare parameters
                 returns_tensor = batch['returns']
-                
+
                 with tf.GradientTape() as tape:
-                    # 使用图模式计算价值损失
+                    # Compute value loss using graph mode
                     value_loss = self.value_forward_pass(inputs, returns_tensor)
-                
-                # 计算梯度并更新（只更新价值函数相关的权重）
+
+                # Compute gradients and update (only update value function related weights)
                 grads = tape.gradient(value_loss, value_vars)
-                if grads is not None:  # 确保梯度存在
+                if grads is not None:  # Ensure gradients exist
                     optimizer.apply_gradients(zip(grads, value_vars))
                 
                 total_value_loss += value_loss
@@ -1919,25 +1907,25 @@ class CircuitTransformer:
         return total_value_loss / (num_batches * ppo_train_epoch)
     
     def _log_prob(self, logits, actions):
-        """计算给定动作的对数概率"""
-        # 确保logits是float32类型
+        """Compute log probability of given actions"""
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
-        
-        # 将logits转换为概率分布
+
+        # Convert logits to probability distribution
         probs = tf.nn.softmax(logits)
-        
-        # 创建动作的one-hot编码
+
+        # Create one-hot encoding of actions
         actions_one_hot = tf.one_hot(actions, depth=self.vocab_size, dtype=tf.float32)
-        
-        # 计算对数概率
+
+        # Compute log probability
         return tf.math.log(tf.reduce_sum(probs * actions_one_hot, axis=-1) + 1e-10)
 
     def _batch_step(self, envs, actions):
-        """批量执行环境步骤（向量化操作）"""
+        """Batch execute environment steps (vectorized operation)"""
         next_states = []
         rewards = []
         dones = []
-        
+
         for env, action in zip(envs, actions):
             next_state, reward, done, _ = env.ppo_step(action)
             next_states.append(next_state)
@@ -1950,43 +1938,43 @@ class CircuitTransformer:
 
     @tf.function(reduce_retracing=True)
     def value_forward_pass(self, inputs, returns):
-        """价值网络前向传播（图模式）"""
-        # 预测价值
+        """Value network forward pass (graph mode)"""
+        # Predict values
         _, values = self._transformer(inputs, training=True)
-        
-        # 确保数据类型一致 - 将values转换为float32
+
+        # Ensure consistent data types - convert values to float32
         values = tf.cast(values, tf.float32)
         returns = tf.cast(returns, tf.float32)
-        
-        # 计算价值损失
+
+        # Compute value loss
         return tf.reduce_mean(tf.square(returns - values))
 
     @tf.function(reduce_retracing=True)
     def policy_forward_pass(self, inputs, actions, old_log_probs, advantages, clip_ratio):
-        """策略网络前向传播（图模式）"""
-        # 获取策略网络输出
+        """Policy network forward pass (graph mode)"""
+        # Get policy network output
         logits, _ = self._transformer(inputs, training=True)
-        
-        # 确保logits是float32类型
+
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
-        
-        # 计算新策略的对数概率
+
+        # Compute log probability of new policy
         new_log_probs = self._log_prob(logits, actions)
-        
-        # 确保所有张量都是float32类型
+
+        # Ensure all tensors are float32 type
         new_log_probs = tf.cast(new_log_probs, tf.float32)
         old_log_probs = tf.cast(old_log_probs, tf.float32)
         advantages = tf.cast(advantages, tf.float32)
-        
-        # 计算PPO损失
+
+        # Compute PPO loss
         ratio = tf.exp(new_log_probs - old_log_probs)
         surr1 = ratio * advantages
         surr2 = tf.clip_by_value(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
         policy_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))
-        
-        # 计算KL散度
+
+        # Compute KL divergence
         kl = tf.reduce_mean(old_log_probs - new_log_probs)
-        
+
         return policy_loss, kl, new_log_probs
 
     def train_ppo(self, 
@@ -2176,23 +2164,23 @@ class CircuitTransformer:
         elif len(action_mask.shape) == 3:  # [1, seq_len, vocab_size]
             enc_action_mask = tf.expand_dims(action_mask, axis=2)  # [1, seq_len, 1, vocab_size]
         else:
-            enc_action_mask = action_mask  # 已经是正确的形状
-        
-        # 处理 targets - 使用最后一个token，确保形状为 [batch, 1]
+            enc_action_mask = action_mask  # Already in correct shape
+
+        # Process targets - use last token, ensure shape is [batch, 1]
         if tf.shape(inputs)[1] > 0:
-            last_token = inputs[0, -1]  # 获取最后一个token
+            last_token = inputs[0, -1]  # Get the last token
             targets = tf.expand_dims(tf.expand_dims(last_token, axis=0), axis=0)  # [1, 1]
         else:
             targets = tf.zeros((1, 1), dtype=tf.int32)
-        
-        # 处理 dec_pos_encoding - 使用最后一个位置编码，确保形状为 [batch, 1, features]
+
+        # Process dec_pos_encoding - use last position encoding, ensure shape is [batch, 1, features]
         if tf.shape(enc_pos_encoding)[1] > 0:
-            last_pos_enc = enc_pos_encoding[0, -1, :]  # 获取最后一个位置编码
+            last_pos_enc = enc_pos_encoding[0, -1, :]  # Get the last position encoding
             dec_pos_encoding = tf.expand_dims(tf.expand_dims(last_pos_enc, axis=0), axis=0)  # [1, 1, features]
         else:
             dec_pos_encoding = tf.zeros((1, 1, self.max_tree_depth * 2), dtype=tf.float32)
-        
-        # 处理 dec_action_mask - 使用当前动作掩码，确保形状为 [batch, 1, 1, vocab_size]
+
+        # Process dec_action_mask - use current action mask, ensure shape is [batch, 1, 1, vocab_size]
         if len(state['action_mask'].shape) == 1:  # [vocab_size]
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(state['action_mask'], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         else:
@@ -2321,8 +2309,8 @@ class CircuitTransformer:
             advantages_ep = []
             last_gae = 0.0
             next_value = 0.0
-            next_done = True  # 假设episode结束时done=True
-            
+            next_done = True  # Assume done=True when episode ends
+
             for t in reversed(range(len(episode))):
                 if t == len(episode) - 1:
                     next_non_terminal = 1.0 - float(next_done)
@@ -2330,18 +2318,18 @@ class CircuitTransformer:
                 else:
                     next_non_terminal = 1.0 - float(episode_dones[t+1])
                     next_value = episode_values[t+1]
-                
+
                 delta = episode_rewards[t] + gamma * next_value * next_non_terminal - episode_values[t]
                 gae = delta + gamma * lam * next_non_terminal * last_gae
                 last_gae = gae
                 advantages_ep.insert(0, gae)
-            
-            # 标准化优势函数
+
+            # Normalize advantage function
             advantages_ep = np.array(advantages_ep, dtype=np.float32)
             if advantages_ep.std() > 0:
                 advantages_ep = (advantages_ep - advantages_ep.mean()) / (advantages_ep.std() + 1e-8)
-            
-            # 添加到结果列表
+
+            # Add to result list
             states.extend(episode_states)
             actions.extend(episode_actions)
             old_log_probs.extend(episode_log_probs)
@@ -2353,20 +2341,20 @@ class CircuitTransformer:
 
 
     def _update_policy(self, states, actions, old_log_probs, advantages, optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch):
-        """更新策略网络"""
+        """Update policy network"""
         @tf.function(reduce_retracing=True)
         def train_step(batch_inputs, batch_actions, batch_old_log_probs, batch_advantages, policy_vars):
             with tf.GradientTape() as tape:
                 policy_loss, kl, _ = self.policy_forward_pass(
-                    batch_inputs, 
-                    batch_actions, 
-                    batch_old_log_probs, 
+                    batch_inputs,
+                    batch_actions,
+                    batch_old_log_probs,
                     batch_advantages,
                     clip_ratio
                 )
             grads = tape.gradient(policy_loss, policy_vars)
             return grads, policy_loss, kl
-        # 创建数据集（仅第一次）
+        # Create dataset (first time only)
         if not hasattr(self, 'policy_dataset') or self.policy_dataset is None:
             dataset = tf.data.Dataset.from_tensor_slices({
                 'tokens': tf.stack([s['tokens'] for s in states]),
@@ -2379,17 +2367,17 @@ class CircuitTransformer:
             self.policy_dataset = dataset
         else:
             dataset = self.policy_dataset
-        
-        # 获取策略网络变量
+
+        # Get policy network variables
         policy_vars = [var for var in self._transformer.trainable_variables if 'value_head' not in var.name]
-        
+
         total_policy_loss = 0
         total_kl = 0
         num_batches = 0
-        
+
         for ppo_epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 准备输入
+                # Prepare inputs
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
@@ -2398,8 +2386,8 @@ class CircuitTransformer:
                     batch['tokens'], batch['pos_enc'], batch['action_mask']
                 )]
                 inputs = self._prepare_batch_input(batch_states)
-                
-                # 使用预定义计算图执行训练步骤
+
+                # Execute training step using predefined computation graph
                 grads, policy_loss, kl = train_step(
                     inputs,
                     batch['actions'],
@@ -2407,69 +2395,69 @@ class CircuitTransformer:
                     batch['advantages'],
                     policy_vars
                 )
-                
-                # 应用梯度
+
+                # Apply gradients
                 if grads is not None:
                     grads, _ = tf.clip_by_global_norm(grads, 1.0)
                     optimizer.apply_gradients(zip(grads, policy_vars))
-                
+
                 total_policy_loss += policy_loss
                 total_kl += kl
                 num_batches += 1
-                
-                # 检查KL散度
+
+                # Check KL divergence
                 if total_kl / num_batches > 1.5 * target_kl:
                     print(f"Early stopping at KL divergence {total_kl/num_batches:.4f} > {1.5*target_kl:.4f}")
                     break
-        
-        # 清理资源
+
+        # Clean up resources
         K.clear_session()
         gc.collect()
         
         return total_policy_loss / num_batches
 
     def _update_value_function(self, states, returns, optimizer, batch_size, ppo_train_epoch):
-        """更新价值函数"""
-        # 创建数据集 - 使用 TensorFlow 操作
+        """Update value function"""
+        # Create dataset - using TensorFlow operations
         dataset = tf.data.Dataset.from_tensor_slices({
             'tokens': tf.stack([s['tokens'] for s in states]),
             'pos_enc': tf.stack([s['positional_encodings'] for s in states]),
             'action_mask': tf.stack([s['action_mask'] for s in states]),
             'returns': tf.convert_to_tensor(returns, dtype=tf.float32)
         })
-        
-        # 应用批处理和预取
+
+        # Apply batching and prefetching
         dataset = dataset.shuffle(len(states)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        
+
         total_value_loss = 0
         num_batches = 0
-        
-        # 获取价值网络变量
+
+        # Get value network variables
         value_vars = self._transformer.value_head.trainable_variables
         for epoch in range(ppo_train_epoch):
             for batch in dataset:
-                # 使用修改后的 _prepare_batch_input 准备输入
+                # Prepare inputs using modified _prepare_batch_input
                 batch_states = [{
                     'tokens': tokens,
                     'positional_encodings': pos_enc,
                     'action_mask': action_mask
                 } for tokens, pos_enc, action_mask in zip(
-                    batch['tokens'], 
-                    batch['pos_enc'], 
+                    batch['tokens'],
+                    batch['pos_enc'],
                     batch['action_mask']
                 )]
                 inputs = self._prepare_batch_input(batch_states)
-                
-                # 准备参数
+
+                # Prepare parameters
                 returns_tensor = batch['returns']
-                
+
                 with tf.GradientTape() as tape:
-                    # 使用图模式计算价值损失
+                    # Compute value loss using graph mode
                     value_loss = self.value_forward_pass(inputs, returns_tensor)
-                
-                # 计算梯度并更新（只更新价值函数相关的权重）
+
+                # Compute gradients and update (only update value function related weights)
                 grads = tape.gradient(value_loss, value_vars)
-                if grads is not None:  # 确保梯度存在
+                if grads is not None:  # Ensure gradients exist
                     optimizer.apply_gradients(zip(grads, value_vars))
                 
                 total_value_loss += value_loss
@@ -2478,25 +2466,25 @@ class CircuitTransformer:
         return total_value_loss / (num_batches * ppo_train_epoch)
     
     def _log_prob(self, logits, actions):
-        """计算给定动作的对数概率"""
-        # 确保logits是float32类型
+        """Compute log probability of given actions"""
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
-        
-        # 将logits转换为概率分布
+
+        # Convert logits to probability distribution
         probs = tf.nn.softmax(logits)
-        
-        # 创建动作的one-hot编码
+
+        # Create one-hot encoding of actions
         actions_one_hot = tf.one_hot(actions, depth=self.vocab_size, dtype=tf.float32)
-        
-        # 计算对数概率
+
+        # Compute log probability
         return tf.math.log(tf.reduce_sum(probs * actions_one_hot, axis=-1) + 1e-10)
 
     def _batch_step(self, envs, actions):
-        """批量执行环境步骤（向量化操作）"""
+        """Batch execute environment steps (vectorized operation)"""
         next_states = []
         rewards = []
         dones = []
-        
+
         for env, action in zip(envs, actions):
             next_state, reward, done, _ = env.ppo_step(action)
             next_states.append(next_state)
@@ -2509,43 +2497,43 @@ class CircuitTransformer:
 
     @tf.function(reduce_retracing=True)
     def value_forward_pass(self, inputs, returns):
-        """价值网络前向传播（图模式）"""
-        # 预测价值
+        """Value network forward pass (graph mode)"""
+        # Predict values
         _, values = self._transformer(inputs, training=True)
-        
-        # 确保数据类型一致 - 将values转换为float32
+
+        # Ensure consistent data types - convert values to float32
         values = tf.cast(values, tf.float32)
         returns = tf.cast(returns, tf.float32)
-        
-        # 计算价值损失
+
+        # Compute value loss
         return tf.reduce_mean(tf.square(returns - values))
 
     @tf.function(reduce_retracing=True)
     def policy_forward_pass(self, inputs, actions, old_log_probs, advantages, clip_ratio):
-        """策略网络前向传播（图模式）"""
-        # 获取策略网络输出
+        """Policy network forward pass (graph mode)"""
+        # Get policy network output
         logits, _ = self._transformer(inputs, training=True)
-        
-        # 确保logits是float32类型
+
+        # Ensure logits are float32 type
         logits = tf.cast(logits, tf.float32)
-        
-        # 计算新策略的对数概率
+
+        # Compute log probability of new policy
         new_log_probs = self._log_prob(logits, actions)
-        
-        # 确保所有张量都是float32类型
+
+        # Ensure all tensors are float32 type
         new_log_probs = tf.cast(new_log_probs, tf.float32)
         old_log_probs = tf.cast(old_log_probs, tf.float32)
         advantages = tf.cast(advantages, tf.float32)
-        
-        # 计算PPO损失
+
+        # Compute PPO loss
         ratio = tf.exp(new_log_probs - old_log_probs)
         surr1 = ratio * advantages
         surr2 = tf.clip_by_value(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
         policy_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))
-        
-        # 计算KL散度
+
+        # Compute KL divergence
         kl = tf.reduce_mean(old_log_probs - new_log_probs)
-        
+
         return policy_loss, kl, new_log_probs
 
     def optimize(self,
@@ -2565,8 +2553,6 @@ class CircuitTransformer:
                  tts_compressed_list=None,
                  overflow_option='origin',
                  return_envs=False,
-                 w_gate=1,
-                 w_delay=0
                  w_gate=1,
                  w_delay=0
                  ):
@@ -2607,10 +2593,6 @@ class CircuitTransformer:
                                                   w_gate=w_gate,
                                                   w_delay=w_delay
                                                   )
-                                                  return_envs,
-                                                  w_gate=w_gate,
-                                                  w_delay=w_delay
-                                                  )
         return optimized_aigs
 
     def optimize_batch(self,
@@ -2632,9 +2614,6 @@ class CircuitTransformer:
                        return_envs=False,
                        return_mcts_roots=False,
                        return_input_encodings=False,
-                       puct_explore_ratio=1.,
-                       w_gate=1,
-                       w_delay=0
                        puct_explore_ratio=1.,
                        w_gate=1,
                        w_delay=0
@@ -2812,7 +2791,7 @@ class CircuitTransformer:
 
 
 if __name__ == "__main__":
-    # 推理测试：传入预训练模型权重
+    # Inference test: load pretrained model weights
     circuit_transformer = CircuitTransformer(ckpt_path='./ckpt-origin/deepsyn_reinforced')
     aig0, info0 = read_aiger(aiger_str="""aag 33 8 0 2 25
 2\n4\n6\n8\n10\n12\n14\n16\n58\n67

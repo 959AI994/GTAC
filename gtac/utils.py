@@ -417,9 +417,9 @@ def measureDelayArea(roots, verbose=False):
     result = result.stdout + "\n" + result.stderr
     # print(f"ABC output for (first 300 chars):\n{result[:300]}...")
     if verbose:
-        print("ABC命令:", cmd)
-        print("ABC输出:", result.stdout)
-        print("ABC错误:", result.stderr)
+        print("ABC command:", cmd)
+        print("ABC output:", result.stdout)
+        print("ABC error:", result.stderr)
 
     stats = {'power': 'N/A', 'delay': 'N/A', 'area': 'N/A', 'size': 'N/A'}
     
@@ -441,53 +441,53 @@ def measureDelayArea(roots, verbose=False):
         os.remove(raw_filename + ".aig")
     except FileNotFoundError:
         pass
-    
+
     if delay is None or area is None:
-        raise RuntimeError("无法从ABC输出中解析")
-    
+        raise RuntimeError("Unable to parse from ABC output")
+
     return delay, area
 
 def compute_critical_path(roots):
-    '''计算关键路径延迟（逻辑深度）'''
+    '''Calculate critical path delay (logic depth)'''
     if not roots:
         return 0
-    
-    # 使用visited集合避免重复计算，而不是缓存深度
+
+    # Use visited set to avoid redundant calculations instead of caching depth
     visited = set()
-    
+
     def traverse(node):
-        # 处理节点为None的情况
+        # Handle case where node is None
         if node is None:
-            return -1  # 返回-1表示无效节点
-        
-        # 叶子节点（输入变量）
+            return -1  # Return -1 to indicate invalid node
+
+        # Leaf nodes (input variables)
         if node.is_leaf():
             return 0
-        
-        # 非叶子节点（AND门）
+
+        # Non-leaf nodes (AND gates)
         left_depth = traverse(node.left) if node.left else -1
         right_depth = traverse(node.right) if node.right else -1
-        
-        # 处理子节点缺失的情况
+
+        # Handle cases of missing child nodes
         if left_depth < 0 and right_depth < 0:
-            depth = 0  # 没有有效子节点
+            depth = 0  # No valid child nodes
         elif left_depth < 0:
-            depth = right_depth + 1  # 只有右子节点
+            depth = right_depth + 1  # Only right child node
         elif right_depth < 0:
-            depth = left_depth + 1   # 只有左子节点
+            depth = left_depth + 1   # Only left child node
         else:
             depth = max(left_depth, right_depth) + 1
-        
+
         return depth
-    
-    # 计算所有根节点的最大深度
+
+    # Calculate maximum depth of all root nodes
     max_depth = 0
     for root in roots:
-        if root:  # 确保根节点有效
+        if root:  # Ensure root node is valid
             depth = traverse(root)
             if depth > max_depth:
                 max_depth = depth
-    
+
     return max_depth
 
 def read_aiger(filename=None, aiger_str: str = None) -> (list[NodeWithInv], dict):

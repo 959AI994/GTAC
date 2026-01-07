@@ -69,5 +69,5 @@ class MCTSNode:
 
 
 def ucb(node: MCTSNode):
-    """UCB (Upper Confidence Bound) 函数"""
+    """UCB (Upper Confidence Bound) function"""
     return node.value + np.sqrt(np.log(node.parent.visits) / node.visits) 

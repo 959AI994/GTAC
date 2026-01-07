@@ -1,5 +1,5 @@
 from gtac.utils import *
-# 使用重构后的模型
+# Use refactored model
 from gtac.model import CircuitTransformer
 from gtac.environment import LogicNetworkEnv
 # from gtac.model import CircuitTransformer, LogicNetworkEnv

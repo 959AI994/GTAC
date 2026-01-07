@@ -392,13 +392,13 @@ class Seq2SeqTransformer(keras.Model):
         dec_action_mask = dec_action_mask[:, 0, :]  # [batch_size, 1, vocab_size], remove 1
     logits = tf.where(dec_action_mask, logits, tf.float32.min)
     
-    # 计算value（如果需要）
+    # Calculate value (if needed)
     value = None
     if return_value:
        value = self.value_head(outputs)
        value = value[:, -1, :]
-    
-    # 根据return_cache和return_value决定返回格式
+
+    # Determine return format based on return_cache and return_value
     if self.return_cache:
         if return_value:
             return logits, {'value': value, 'cache': {'encoder_outputs': encoder_outputs, 'outputs': outputs, 'kv_cache': kv_cache}}
@@ -804,7 +804,7 @@ class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
     self.warmup_steps = warmup_steps
 
   def __call__(self, step):
-    # 处理 step 为 None 的情况（初始化阶段）
+    # Handle case when step is None (during initialization)
     if step is None:
        step = 1e-3
     step = tf.cast(step, dtype=tf.float32)
