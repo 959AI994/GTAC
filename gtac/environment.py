@@ -4,8 +4,8 @@ import copy
 import numpy as np
 import bitarray
 import bitarray.util
-from circuit_transformer.utils import Node, NodeWithInv, compute_input_tt, compute_tt, check_conflict, get_inputs_rec, detect_circle, compute_critical_path
-from circuit_transformer.encoding import stack_to_encoding, int_to_node, deref_node
+from gtac.utils import Node, NodeWithInv, compute_input_tt, compute_tt, check_conflict, get_inputs_rec, detect_circle, compute_critical_path
+from gtac.encoding import stack_to_encoding, int_to_node, deref_node
 
 
 class LogicNetworkEnv:

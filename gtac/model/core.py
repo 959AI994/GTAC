@@ -25,11 +25,11 @@ import gc
 sys.path.append('./')
 
 from tensorflow_models import nlp
-from circuit_transformer.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
-from circuit_transformer.utils import *
-from circuit_transformer.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
-from circuit_transformer.environment import LogicNetworkEnv
-from circuit_transformer.mcts import MCTSNode, ucb
+from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
+from gtac.utils import *
+from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
+from gtac.environment import LogicNetworkEnv
+from gtac.mcts import MCTSNode, ucb
 
 
 class CircuitTransformer:

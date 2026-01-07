@@ -1,10 +1,10 @@
 import time
 import numpy as np
 import scipy.special as special
-from circuit_transformer.utils import *
-from circuit_transformer.environment import LogicNetworkEnv
-from circuit_transformer.mcts import MCTSNode
-from circuit_transformer.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
+from gtac.utils import *
+from gtac.environment import LogicNetworkEnv
+from gtac.mcts import MCTSNode
+from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
 
 def _batch_estimate_policy(self, envs: list, src_tokens, src_pos_enc, src_action_mask, action_masks, cache):
     start_time = time.time()

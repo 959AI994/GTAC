@@ -4,8 +4,8 @@ import random
 
 import numpy as np
 
-import circuit_transformer as ct
-from circuit_transformer.model import CircuitTransformerRefactored
+import gtac as ct
+from gtac.model import CircuitTransformerRefactored
 
 def main():
     parser = argparse.ArgumentParser(description="(Approximate) Circuit Transformer: training + inference example")

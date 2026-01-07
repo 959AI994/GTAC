@@ -257,7 +257,7 @@ visualization/*
 get-pip.py
 _gpgbuilder
 .vscode/
-circuit_transformer/tensorboard/
+gtac/tensorboard/
 **/events.out.tfevents*
 **/*.xplane.pb
 official/

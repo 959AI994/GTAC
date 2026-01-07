@@ -30,10 +30,10 @@ import multiprocessing as mp
 from multiprocessing import Process, Queue as MPQueue, Value, Array
 import copy
 
-from circuit_transformer.model import CircuitTransformerRefactored
-from circuit_transformer.utils import *
-from circuit_transformer.environment import LogicNetworkEnv
-from circuit_transformer.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
+from gtac.model import CircuitTransformerRefactored
+from gtac.utils import *
+from gtac.environment import LogicNetworkEnv
+from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
 
 
 def check_disk_space(min_space_gb=1.0):

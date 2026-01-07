@@ -1,7 +1,7 @@
 import copy
 import time
 import numpy as np
-from circuit_transformer.mcts import MCTSNode
+from gtac.mcts import MCTSNode
 
 
 def _batch_MCTS_policy_with_leaf_parallelization(self, envs: list, num_leaf_parallelizations=8, num_playouts=100, max_inference_seq_length=None,

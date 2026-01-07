@@ -4,9 +4,9 @@ import numpy as np
 import tensorflow as tf
 import tf_keras as keras
 import tracemalloc
-from circuit_transformer.utils import MPDataset
+from gtac.utils import MPDataset
 # 导入必要的函数
-from circuit_transformer.tensorflow_transformer import masked_loss, masked_accuracy
+from gtac.tensorflow_transformer import masked_loss, masked_accuracy
 
 def train(self,
           train_data_dir,

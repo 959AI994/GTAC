@@ -31,8 +31,8 @@ import sys
 sys.path.append('./')
 
 from tensorflow_models import nlp
-from circuit_transformer.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
-from circuit_transformer.utils import *
+from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
+from gtac.utils import *
 
 class MCTSNode:
     INIT_MAX_VALUE = -1000

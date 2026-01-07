@@ -20,668 +20,16 @@ import tensorflow as tf
 import tf_keras as keras
 import keras.backend as K
 import gc
-import keras.backend as K
-import gc
-# from tensorflow import keras
 
-# import keras
-# from tensorflow import keras
-# import tensorflow.keras
-import sys
 # replace your path
 sys.path.append('./')
 
 from tensorflow_models import nlp
-from circuit_transformer.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
-from circuit_transformer.utils import *
-# from tensorflow.keras.optimizers import Adam
-
-
-
-'''
-for 8-input, 2-output circuits
-Token(int):
-0: PAD
-1: EOS
-2,4,6,...,16: PI1, PI2, PI3, ... , PI8
-3,5,7,...,17: ~PI1, ~PI2, ~PI3, ..., ~PI8
-18: AND
-19: NAND
-
-Newly add:
-20: constant 0
-21: constant 1
-'''
-
-
-def node_to_int(root: NodeWithInv, num_inputs: int):
-    # zero for [PAD] that will be masked
-    if root.is_leaf():
-        if root.var >= 0:
-            return 2 + root.var * 2 + root.inverted  # [x_i] or [x_i_NOT]
-        else:
-            return 21 + root.var + root.inverted    # [constant 0] or [constant 1]
-    else:
-        return 2 + num_inputs * 2 + root.inverted  # [AND] or [AND_NOT]
-
-
-def int_to_node(token: int, num_inputs: int):
-    if token == 0 or token == 1:  # [PAD] or [EOS]
-        return False
-    elif token < 2 + num_inputs * 2:  # [x_i] or [x_i_NOT]
-        return NodeWithInv(Node((token - 2) // 2, None, None), token % 2)
-    elif token < 2 + num_inputs * 2 + 2:  # [AND] or [AND_NOT]
-        return NodeWithInv(Node(None, None, None), token % 2)
-    elif token < 2 + num_inputs *2 + 4:  # [constant 0] or [constant 1]
-        return NodeWithInv(Node(-1,None,None), token % 2)  
-    else:
-        raise ValueError(token)
-
-
-def encode_aig(roots: list[NodeWithInv], num_inputs: int) -> (list[int], list[int]):
-    def encode_aig_rec(root: NodeWithInv, seq_enc: list[int], cur_pos_enc: int, pos_enc: list[int]):
-        seq_enc.append(node_to_int(root, num_inputs))
-        pos_enc.append(cur_pos_enc)
-        if not root.is_leaf():
-            encode_aig_rec(root.left, seq_enc, (cur_pos_enc << 2) + 1, pos_enc)
-            encode_aig_rec(root.right, seq_enc, (cur_pos_enc << 2) + 2, pos_enc)
-
-    seq_enc, pos_enc = [], []
-    assert len(roots) <= 2
-    encode_aig_rec(roots[0], seq_enc, 1, pos_enc)
-    if len(roots) == 2:
-        encode_aig_rec(roots[1], seq_enc, 2, pos_enc)
-    return seq_enc, pos_enc
-
-
-def stack_to_encoding(tree_stack: list, root_id: int, max_tree_depth: int):
-    assert len(tree_stack) <= max_tree_depth
-    assert root_id >= 0
-    encoding = np.zeros(max_tree_depth * 2, np.float32)
-    for i, node in enumerate(reversed(tree_stack)):
-        if i == 0:
-            if node.left is None:  # the current node should be inserted on the left side
-                encoding[i * 2] = 1.
-            else:
-                encoding[i * 2 + 1] = 1.
-        else:
-            if node.right is None:  # the current node is inserted on the left side
-                encoding[i * 2] = 1.
-            else:
-                encoding[i * 2 + 1] = 1.
-    encoding[len(tree_stack) * 2 + root_id] = 1.
-    return encoding
-
-
-def deref_node(root: Node, ref_dict: dict, context_nodes=None, verbose=0):
-    if context_nodes is not None and root in context_nodes:
-        return 0
-    if root.is_leaf():
-        return 0
-    value = 1
-    for child in [root.left.parent, root.right.parent]:
-        if verbose > 1:
-            print("ref %s (parent %s, %s) from %d to %d" %
-                  (child, root, "left" if child is root.left.parent else "right", ref_dict[child], ref_dict[child] - 1))
-        ref_dict[child] -= 1
-        if ref_dict[child] == 0:
-            value += deref_node(child, ref_dict, context_nodes, verbose)
-    return value
-
-
-class LogicNetworkEnv:
-    def __init__(self,
-                 tts,
-                 num_inputs,
-                 context_num_inputs=None,
-                 input_tt=None,
-                 init_care_set_tt=None,                 # for the first output (which can be computed in advance) or for all the outputs (list[num_outputs])
-                 init_care_set_tt=None,                 # for the first output (which can be computed in advance) or for all the outputs (list[num_outputs])
-                 max_tree_depth=32,
-                 max_inference_tree_depth=16,
-                 max_inference_reward=None,
-                 max_length=None,
-                 eos_id=1,
-                 pad_id=0,
-                 context_hash: set = None,
-                 ffw = None,
-                 and_always_available=False,            # for training
-                 and_always_available=False,            # for training
-                 use_controllability_dont_cares=True,   # Patterns that cannot happen at inputs to a network node.
-                 tts_compressed=None,                   # must specify when `use_controllability_dont_cares` = False, the truth table of 2^num_inputs corresponding to the "local" aig
-                 verbose=0,
-                 error_rate_threshold = 0.05,           # for approximate 
-                 w_gate = 1,
-                 w_delay = 1,
-                 w_error = 1
-                 error_rate_threshold = 0.05,           # for approximate 
-                 w_gate = 1,
-                 w_delay = 1,
-                 w_error = 1
-                 ):
-        # assert len(tts) == 2
-        self.num_outputs = len(tts)
-        self.num_inputs = num_inputs
-        self.context_num_inputs = context_num_inputs if context_num_inputs is not None else num_inputs
-        self.tts_bitarray = tts
-        self.init_care_set_tt = init_care_set_tt if init_care_set_tt is not None else bitarray.util.ones(2 ** self.context_num_inputs)
-        self.ffw = ffw
-        self.roots = []
-        self.tokens = []
-        self.positional_encodings = []
-        self.action_masks = []
-        self.is_finished = False
-        self.gen_eos = False
-        self.tree_stack = []
-        # self.tt_hash = {}
-        # self.tt_cache = {}
-        self.context_hash = context_hash
-        self.t = 0
-        self.max_length = max_length
-        self.rewards = []
-        self.EOS = eos_id
-        self.PAD = pad_id
-        self.max_tree_depth = max_tree_depth        # for positional encoding
-        self.max_inference_tree_depth = max_inference_tree_depth    # for pruning failed circuits
-        self.max_inference_reward = max_inference_reward
-        self.and_always_available = and_always_available
-        self.use_controllability_dont_cares = use_controllability_dont_cares
-        self.unfinished_penalty = -10
-        self.verbose = verbose
-        self.error_rate_threshold = error_rate_threshold
-        # new added weight parameters
-        self.w_gate = w_gate
-        self.w_delay = w_delay
-        self.w_error = w_error
-
-        self.prev_gate_count = 0
-        self.prev_delay = 0
-        self.prev_error = 0
-
-        self.error_rate_threshold = error_rate_threshold
-        # new added weight parameters
-        self.w_gate = w_gate
-        self.w_delay = w_delay
-        self.w_error = w_error
-
-        self.prev_gate_count = 0
-        self.prev_delay = 0
-        self.prev_error = 0
-
-        if input_tt is None:
-            self.input_tt_bitarray = compute_input_tt(self.context_num_inputs)
-        else:
-            self.input_tt_bitarray = input_tt
-        self.tt_cache_bitarray = {Node(i // 2, None, None): v
-                                  for i, v in enumerate(self.input_tt_bitarray) if i % 2 == 0}
-        self.tt_hash_bitarray = {v.tobytes(): node for node, v in self.tt_cache_bitarray.items()}
-        self.vocab_size = 2 + num_inputs * 2 + 2 + 2                    # PAD, EOS, PI, ~PI, AND, NAND, 0, 1 
-        self.vocab_size = 2 + num_inputs * 2 + 2 + 2                    # PAD, EOS, PI, ~PI, AND, NAND, 0, 1 
-        self.ref_dict = {k: 1 for k in self.tt_cache_bitarray.keys()}
-        self.context_nodes = set()
-        self.context_records = dict()
-
-        if self.use_controllability_dont_cares:
-            self.initialize_care_set_tt()
-        else:
-            assert tts_compressed is not None
-            assert init_care_set_tt is None
-            self.compress_indices = None
-            self.input_tt_bitarray_compressed = compute_input_tt(len(self.input_tt_bitarray) // 2)
-            self.tts_bitarray_compressed = tts_compressed
-            self.tt_cache_bitarray_compressed = {Node(i // 2, None, None): v
-                                                 for i, v in enumerate(self.input_tt_bitarray_compressed) if i % 2 == 0}
-
-        self.action_masks.append(self.gen_action_mask())
-
-    @property
-    def cur_root_id(self):
-        '''
-        Return: corresponding output id
-        To do: support more outputs (now only support 2-output circuit)
-        '''
-        '''
-        Return: corresponding output id
-        To do: support more outputs (now only support 2-output circuit)
-        '''
-        return len(self.roots) - (1 if len(self.tree_stack) > 0 else 0)
-
-    @property
-    def cumulative_reward(self):
-        return sum(self.rewards)
-
-    @property
-    def min_cumulative_reward(self):
-        res = np.iinfo(int).max
-        cumulative_reward = 0
-        for r in self.rewards:
-            cumulative_reward += r
-            res = min(res, cumulative_reward)
-        return res
-
-    @property
-    def success(self):
-        return self.gen_eos
-
-    def reset(self, **kwargs):
-        """Reset environment to initial state"""
-        # Initialize state variables
-        self.roots = []
-        self.tokens = []
-        self.positional_encodings = []
-        self.action_masks = []
-        self.tree_stack = []
-        self.is_finished = False
-        self.gen_eos = False
-        self.t = 0
-        self.rewards = []
-        self.cur_root_id = 0
-        
-        # Initialize truth table cache
-        self.tt_cache_bitarray = {Node(i // 2, None, None): v
-                                 for i, v in enumerate(self.input_tt_bitarray) if i % 2 == 0}
-        self.tt_hash_bitarray = {v.tobytes(): node for node, v in self.tt_cache_bitarray.items()}
-        self.ref_dict = {k: 1 for k in self.tt_cache_bitarray.keys()}
-        self.context_nodes = set()
-        self.context_records = dict()
-        
-        # Initialize care set (if used)
-        if self.use_controllability_dont_cares:
-            self.initialize_care_set_tt()
-        
-        # Generate initial action mask
-        self.action_masks.append(self.gen_action_mask())
-        
-        return self._get_obs()
-
-    def _get_obs(self):
-        """Get current observation"""
-        # Pad sequence to max length
-        tokens = np.array(self.tokens + [self.PAD] * (self.max_length - len(self.tokens)), dtype=np.int32)
-        pos_enc = np.zeros((self.max_length, self.max_tree_depth * 2), dtype=np.float32)
-        if self.positional_encodings:
-            pos_enc[:len(self.positional_encodings)] = np.array(self.positional_encodings)
-        
-        # Current action mask
-        action_mask = self.action_masks[-1] if self.action_masks else np.zeros(self.action_space.n, dtype=bool)
-        return {
-            'tokens': tokens,
-            'positional_encodings': pos_enc,
-            'action_mask': action_mask
-        }
-
-    def reset(self, **kwargs):
-        """Reset environment to initial state"""
-        # Initialize state variables
-        self.roots = []
-        self.tokens = []
-        self.positional_encodings = []
-        self.action_masks = []
-        self.tree_stack = []
-        self.is_finished = False
-        self.gen_eos = False
-        self.t = 0
-        self.rewards = []
-        self.cur_root_id = 0
-        
-        # Initialize truth table cache
-        self.tt_cache_bitarray = {Node(i // 2, None, None): v
-                                 for i, v in enumerate(self.input_tt_bitarray) if i % 2 == 0}
-        self.tt_hash_bitarray = {v.tobytes(): node for node, v in self.tt_cache_bitarray.items()}
-        self.ref_dict = {k: 1 for k in self.tt_cache_bitarray.keys()}
-        self.context_nodes = set()
-        self.context_records = dict()
-        
-        # Initialize care set (if used)
-        if self.use_controllability_dont_cares:
-            self.initialize_care_set_tt()
-        
-        # Generate initial action mask
-        self.action_masks.append(self.gen_action_mask())
-        
-        return self._get_obs()
-
-    def _get_obs(self):
-        """Get current observation"""
-        # Pad sequence to max length
-        tokens = np.array(self.tokens + [self.PAD] * (self.max_length - len(self.tokens)), dtype=np.int32)
-        pos_enc = np.zeros((self.max_length, self.max_tree_depth * 2), dtype=np.float32)
-        if self.positional_encodings:
-            pos_enc[:len(self.positional_encodings)] = np.array(self.positional_encodings)
-        
-        # Current action mask
-        action_mask = self.action_masks[-1] if self.action_masks else np.zeros(self.action_space.n, dtype=bool)
-        return {
-            'tokens': tokens,
-            'positional_encodings': pos_enc,
-            'action_mask': action_mask
-        }
-
-    def initialize_care_set_tt(self):       # both controllability and observability don't cares
-        if self.cur_root_id == 0:
-            self.care_set_tt = self.init_care_set_tt[self.cur_root_id] if isinstance(self.init_care_set_tt, list) else self.init_care_set_tt
-        else:
-            if self.ffw is not None:
-                new_inputs = get_inputs_rec(self.roots)
-                modified_list = []
-                for extracted_input, orig_node in self.ffw.input_mapping.items():
-                    if extracted_input.var in new_inputs:
-                        for new_input_with_inv in new_inputs[extracted_input.var]:
-                            modified_list.append((new_input_with_inv, new_input_with_inv.parent))
-                            new_input_with_inv.parent = orig_node
-                for new_output, output in zip(self.roots, self.ffw.outputs):
-                    for node_with_inv in self.ffw.parent.fanout_dict[output].keys():
-                        node_with_inv.parent = new_output.parent
-                        if new_output.inverted:
-                            node_with_inv.inverted = not node_with_inv.inverted
-                if not detect_circle(self.ffw.parent.outputs):
-                    self.care_set_tt = self.ffw.parent.compute_care_set(self.ffw.outputs[self.cur_root_id])
-                else:
-                    self.care_set_tt = bitarray.util.ones(2 ** self.context_num_inputs)
-                for new_output, output in zip(self.roots, self.ffw.outputs):
-                    for node_with_inv in self.ffw.parent.fanout_dict[output].keys():
-                        node_with_inv.parent = output
-                        if new_output.inverted:
-                            node_with_inv.inverted = not node_with_inv.inverted
-                for new_input_with_inv, parent in modified_list:
-                    new_input_with_inv.parent = parent
-            elif isinstance(self.init_care_set_tt, list):
-                self.care_set_tt = self.init_care_set_tt[self.cur_root_id]
-
-        a = bytearray()
-        len_care_set = self.care_set_tt.count()
-        assert len(self.input_tt_bitarray) // 2 <= 8  # one byte
-        for i, tt in enumerate(self.input_tt_bitarray):
-            if i % 2 == 0:
-                a.extend(tt[self.care_set_tt].unpack(one=(1 << (i // 2)).to_bytes(1, 'big')))
-        a_np = np.frombuffer(a, dtype=np.uint8).reshape(len(self.input_tt_bitarray) // 2, len_care_set)
-        a_np = np.sum(a_np, axis=0, dtype=np.uint8)
-        a_np_unique, self.compress_indices = np.unique(a_np, return_index=True)
-
-        if self.verbose > 1:
-            a = bytearray()
-            for i, tt in enumerate(self.input_tt_bitarray):
-                if i % 2 == 0:
-                    a.extend(tt.unpack(one=(1 << (i // 2)).to_bytes(1, 'big')))
-            a_np_ = np.frombuffer(a, dtype=np.uint8).reshape(len(self.input_tt_bitarray) // 2, len(self.care_set_tt))
-            a_np_ = np.sum(a_np_, axis=0, dtype=np.uint8)
-            a_np_unique_, self.compress_indices_no_care_set = np.unique(a_np_, return_index=True)
-            if len(self.compress_indices_no_care_set) > len(self.compress_indices):
-                print("care set size: %d, without care set: %d, with care set: %d" %
-                      (self.care_set_tt.count(), len(self.compress_indices_no_care_set), len(self.compress_indices)))
-
-        self.compress_indices = list(self.compress_indices)
-        a_bitarray_unique = [bitarray.bitarray() for _ in a_np_unique]
-        for a_bitarray_i, a_np_i in zip(a_bitarray_unique, a_np_unique):
-            a_bitarray_i.frombytes(a_np_i.tobytes())
-
-        if len(a_bitarray_unique) == 0:
-            self.input_tt_bitarray_compressed = [bitarray.bitarray() for _ in self.input_tt_bitarray]
-        else:
-            self.input_tt_bitarray_compressed = []
-            for i, a_tuple in enumerate(zip(*a_bitarray_unique)):
-                if i < 8 - len(self.input_tt_bitarray) // 2:
-                    continue
-                a_bitarray = bitarray.bitarray(a_tuple)
-                self.input_tt_bitarray_compressed.extend([~a_bitarray, a_bitarray])
-            self.input_tt_bitarray_compressed.reverse()
-
-        constant0 = bitarray.bitarray(len(self.compress_indices))
-        constant0.setall(0)  # constant 0
-        constant1 = bitarray.bitarray(len(self.compress_indices))
-        constant1.setall(1)  # constant 1
-        self.input_tt_bitarray_compressed.extend([constant0, constant1])
-
-
-        constant0 = bitarray.bitarray(len(self.compress_indices))
-        constant0.setall(0)  # constant 0
-        constant1 = bitarray.bitarray(len(self.compress_indices))
-        constant1.setall(1)  # constant 1
-        self.input_tt_bitarray_compressed.extend([constant0, constant1])
-
-        # self.input_tt_bitarray_compressed_ = [bitarray.bitarray(_) for _ in zip(*a_bitarray_unique)]
-        tts_care_set = [tt[self.care_set_tt] for tt in self.tts_bitarray]
-        self.tts_bitarray_compressed = [bitarray.bitarray([tt[i] for i in self.compress_indices]) for tt in tts_care_set]
-        self.tt_cache_bitarray_compressed = {Node(i // 2, None, None): v
-                                             for i, v in enumerate(self.input_tt_bitarray_compressed) if i % 2 == 0}
-        # add constant 0/1
-        const0_node = NodeWithInv(Node(-1, None, None), inverted=False)
-        const1_node = NodeWithInv(Node(-1, None, None), inverted=True)
-
-        self.tt_cache_bitarray_compressed[const0_node] = constant0
-        self.tt_cache_bitarray_compressed[const1_node] = constant1
-        # add constant 0/1
-        const0_node = NodeWithInv(Node(-1, None, None), inverted=False)
-        const1_node = NodeWithInv(Node(-1, None, None), inverted=True)
-
-        self.tt_cache_bitarray_compressed[const0_node] = constant0
-        self.tt_cache_bitarray_compressed[const1_node] = constant1
-
-    def compress(self, tt):
-        return (tt[self.care_set_tt])[self.compress_indices]
-
-    def step(self, token): ###########################################################################
-        token = int(token)
-        self.positional_encodings.append(stack_to_encoding(self.tree_stack, self.cur_root_id, self.max_tree_depth))
-        if token == self.EOS:
-            self.is_finished = True
-            if self.gen_eos:
-                reward, done = 0, True
-            else:
-                reward, done = self.unfinished_penalty, True
-        elif self.is_finished:
-            assert token == self.PAD
-            reward, done = 0, True
-        elif not self.is_finished and self.t >= self.max_length - 1:  # reached the last step but still not finished
-            reward, done = self.unfinished_penalty, True
-        else:
-            node = int_to_node(token, self.num_inputs)
-            if len(self.tree_stack) == 0:
-                self.roots.append(node)
-            else:
-                # insert node into the tree
-                if self.tree_stack[-1].left is None:
-                    self.tree_stack[-1].left = node
-                else:
-                    self.tree_stack[-1].right = node
-            self.ref_dict[node.parent] = 1
-            # calculate reward
-            reward = 0 if node.is_leaf() else -1
-            done = False
-            # update stack
-            if node.is_leaf():
-                self.tree_stack.append(node)
-                while len(self.tree_stack) > 0 and (self.tree_stack[-1].is_leaf() or (
-                        self.tree_stack[-1].left is not None and self.tree_stack[-1].right is not None)):
-                    old_node = copy.copy(self.tree_stack[-1])
-                    old_node.inverted = False
-                    tt_bitarray = compute_tt(old_node, input_tt=self.input_tt_bitarray, cache=self.tt_cache_bitarray)
-                    tt_not_bitarray = ~tt_bitarray
-                    tt = tt_bitarray.tobytes()
-                    tt_not = tt_not_bitarray.tobytes()
-                    create_new_hash = True
-                    if tt in self.tt_hash_bitarray or tt_not in self.tt_hash_bitarray:
-                        inverted = tt_not in self.tt_hash_bitarray
-                        new_node = self.tt_hash_bitarray[tt_not if inverted else tt]
-                        if self.ref_dict[new_node] > 0:     # use existing node to replace self.tree_stack[-1]
-                            create_new_hash = False
-                            new_node_with_inv = NodeWithInv(new_node, (not inverted) if self.tree_stack[-1].inverted else inverted)
-                            self.tt_cache_bitarray[new_node_with_inv] = tt_not_bitarray if self.tree_stack[-1].inverted else tt_bitarray
-                            if self.use_controllability_dont_cares:
-                                self.tt_cache_bitarray_compressed[new_node_with_inv] = self.compress(self.tt_cache_bitarray[new_node_with_inv])
-                            else:
-                                tt_bitarray_compressed = compute_tt(old_node, input_tt=self.input_tt_bitarray_compressed, cache=self.tt_cache_bitarray_compressed)
-                                self.tt_cache_bitarray_compressed[new_node_with_inv] = (~tt_bitarray_compressed) if self.tree_stack[-1].inverted else tt_bitarray_compressed
-                            if len(self.tree_stack) > 1:
-                                if self.tree_stack[-2].left is self.tree_stack[-1]:
-                                    self.tree_stack[-2].left = new_node_with_inv
-                                else:
-                                    self.tree_stack[-2].right = new_node_with_inv
-                            else:
-                                self.roots[self.cur_root_id] = new_node_with_inv
-                            self.ref_dict[new_node] += 1
-                            self.ref_dict[self.tree_stack[-1].parent] -= 1
-                            v1 = deref_node(self.tree_stack[-1].parent, self.ref_dict, self.context_nodes)
-                            reward += v1
-                    if create_new_hash:
-                        self.tt_hash_bitarray[tt_bitarray.tobytes()] = self.tree_stack[-1].parent
-                        self.tt_cache_bitarray[self.tree_stack[-1]] = tt_not_bitarray if self.tree_stack[-1].inverted else tt_bitarray
-                        if self.use_controllability_dont_cares:
-                            self.tt_cache_bitarray_compressed[self.tree_stack[-1]] = self.compress(self.tt_cache_bitarray[self.tree_stack[-1]])
-                        else:
-                            tt_bitarray_compressed = compute_tt(self.tree_stack[-1],
-                                                                               input_tt=self.input_tt_bitarray_compressed,
-                                                                               cache=self.tt_cache_bitarray_compressed)
-                            self.tt_cache_bitarray_compressed[self.tree_stack[-1]] = tt_bitarray_compressed
-                        if self.context_hash is not None and (tt in self.context_hash or tt_not in self.context_hash):
-                            v1 = deref_node(self.tree_stack[-1].parent, self.ref_dict, self.context_nodes)
-                            self.context_nodes.add(self.tree_stack[-1].parent)
-                            self.context_records[self.tree_stack[-1].parent] = tt
-                            reward += v1
-                    self.tree_stack.pop()
-                if len(self.tree_stack) == 0 and len(self.roots) == self.num_outputs:
-                    self.gen_eos = True  # next token should be EOS
-                    done = True
-            else:
-                self.tree_stack.append(node)
-        self.tokens.append(token)
-        self.t += 1
-
-        current_delay = compute_critical_path(self.roots)
-        
-        # compute delta delay
-        delta_delay = self.prev_delay - current_delay
-        reward = (
-            self.w_gate * reward +
-            self.w_delay * delta_delay
-        )
-        self.prev_delay = current_delay
-
-        current_delay = compute_critical_path(self.roots)
-        
-        # compute delta delay
-        delta_delay = self.prev_delay - current_delay
-        reward = (
-            self.w_gate * reward +
-            self.w_delay * delta_delay
-        )
-        self.prev_delay = current_delay
-        self.rewards.append(reward)
-        if len(self.tree_stack) == 0 and self.cur_root_id < self.num_outputs and self.use_controllability_dont_cares:
-            self.initialize_care_set_tt()
-        self.action_masks.append(self.gen_action_mask())
-        return reward, done
-
-    def ppo_step(self, action):
-
-        # If environment has ended, continue returning end state
-        if self.is_finished:
-            return self._get_obs(), 0, True, {}
-        
-        # Execute action (using original step method)
-        reward, done = self.step(action)
-        
-        # Check if max length reached
-        if self.t >= self.max_length - 1 and not self.is_finished:
-            done = True
-            reward = self.unfinished_penalty
-        
-        return self._get_obs(), reward, done, {}
-
-    def ppo_step(self, action):
-
-        # If environment has ended, continue returning end state
-        if self.is_finished:
-            return self._get_obs(), 0, True, {}
-        
-        # Execute action (using original step method)
-        reward, done = self.step(action)
-        
-        # Check if max length reached
-        if self.t >= self.max_length - 1 and not self.is_finished:
-            done = True
-            reward = self.unfinished_penalty
-        
-        return self._get_obs(), reward, done, {}
-
-    def gen_action_mask(self): ################################################################
-        action_mask_ba = bitarray.util.zeros(self.vocab_size)
-        cur_node = None if len(self.tree_stack) == 0 else self.tree_stack[-1]
-        action_mask_ba[self.EOS] = cur_node is None and not self.is_finished and len(self.roots) == self.num_outputs
-        action_mask_ba[self.PAD] = self.is_finished
-        if not self.is_finished and not self.gen_eos and \
-                (self.max_inference_reward is None or self.cumulative_reward >= self.max_inference_reward):
-            # insert the node into the tree
-            # var = -2 means not determined (check all possibilities)
-            node = NodeWithInv(parent=Node(var=-2, left=None, right=None), inverted=False)
-            if cur_node is None:
-                is_root = True
-            else:
-                is_root = False
-                if cur_node.left is None:
-                    cur_node.left = node
-                else:
-                    cur_node.right = node
-            has_conflict_ba, completeness_ba = check_conflict(self.tree_stack, self.tts_bitarray_compressed[self.cur_root_id], ####################check conflict
-                                                              self.input_tt_bitarray_compressed, self.tt_cache_bitarray_compressed, tolerance=error_rate_threshold)
-            value_action_mask_ba = ~has_conflict_ba
-            action_mask_ba[2: 2 + len(value_action_mask_ba)] = value_action_mask_ba             # PAD: 0, EOS:1
-            action_mask_ba[2: 2 + len(value_action_mask_ba)] = value_action_mask_ba             # PAD: 0, EOS:1
-            if self.and_always_available:
-                action_mask_ba[2 + self.num_inputs * 2: 4 + self.num_inputs * 2] = bitarray.bitarray('11')
-            else:
-                action_mask_ba[2 + self.num_inputs * 2: 4 + self.num_inputs * 2] = bitarray.bitarray('00') \
-                    if (value_action_mask_ba & completeness_ba).any() or len(self.tree_stack) >= self.max_inference_tree_depth - 2 \
-                    else bitarray.bitarray('11')
-            action_mask_ba[4 + self.num_inputs * 2 : 6 + self.num_inputs * 2] = value_action_mask_ba[-2:]
-            action_mask_ba[4 + self.num_inputs * 2 : 6 + self.num_inputs * 2] = value_action_mask_ba[-2:]
-            # remove the node from the tree
-            if not is_root:
-                if cur_node.right is None:
-                    cur_node.left = None
-                else:
-                    cur_node.right = None
-        if not action_mask_ba.any():
-            action_mask_ba[self.EOS] = True
-        return np.array(action_mask_ba.tolist(), dtype=bool)
-
-
-class MCTSNode:
-    INIT_MAX_VALUE = -1000
-
-    def __init__(self, parent, t, action, prob=None, info=None, puct_explore_ratio=1.):
-        self.t = t
-        self.parent = parent
-        self.action = action
-        self.explored = False
-        self.children = []
-        self.explored_children = 0
-        self.visits = 0
-        self.total_value = 0
-        self.info = info
-        self.v = None
-        self.prob = prob
-        self.max_value = self.INIT_MAX_VALUE
-        self.puct_explore_ratio = puct_explore_ratio
-
-    @property
-    def value(self):  # Q
-        return self.total_value / self.visits if self.visits != 0 else 100
-
-    @property
-    def puct(self):
-        return self.value + self.puct_explore_ratio * self.prob * np.sqrt(self.parent.visits) / (1 + self.visits)
-
-    def __repr__(self):     # sum reward: from the root to the end, value: future reward from (excluding) the current node to the end
-        repr = "(%s%s, visits: %d, avg sum reward: %.2f, max sum reward: %d, value: %s, seq: %s)" % \
-               (self.action, " (Done)" if self.info['done'] else "", self.visits, self.value, self.max_value, self.v, self.info['env'].tokens)
-        if self.prob is not None:
-            repr = repr[:-1] + ", prob: %.2f, puct: %.2f)" % (self.prob, self.puct)
-        return repr
-
-
-def ucb(node: MCTSNode):
-    return node.value + np.sqrt(np.log(node.parent.visits) / node.visits)
+from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
+from gtac.utils import *
+from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node
+from gtac.environment import LogicNetworkEnv
+from gtac.mcts import MCTSNode, ucb
 
 
 class CircuitTransformer:
@@ -704,12 +52,8 @@ class CircuitTransformer:
                  policy_temperature_in_mcts=1.,
                  w_gate=1,
                  w_delay=0
-                 policy_temperature_in_mcts=1.,
-                 w_gate=1,
-                 w_delay=0
                  ):
         self.num_inputs = num_inputs
-        self.vocab_size = 2 + 2 * self.num_inputs + 2 + 2
         self.vocab_size = 2 + 2 * self.num_inputs + 2 + 2
         self.embedding_width = embedding_width
         self.num_layers = num_layers
@@ -729,11 +73,6 @@ class CircuitTransformer:
         self.constant_1_id = num_inputs * 2 + 5
         self.w_gate = w_gate
         self.w_delay = w_delay
-        self.freeze_encoder = False         # Modified: Freeze encoder layers for finetuning.
-        self.constant_0_id = num_inputs * 2 + 4
-        self.constant_1_id = num_inputs * 2 + 5
-        self.w_gate = w_gate
-        self.w_delay = w_delay
         # https://www.tensorflow.org/guide/mixed_precision
         if mixed_precision:
             keras.mixed_precision.set_global_policy('mixed_float16')
@@ -742,16 +81,14 @@ class CircuitTransformer:
         if self.ckpt_path is not None:
             # self.build_model()  # 先构建模型变量
             self.load(self.ckpt_path)  # 再加载权重
-            # self.build_model()  # 先构建模型变量
-            self.load(self.ckpt_path)  # 再加载权重
 
         @tf.function(reduce_retracing=True)
-        def _transformer_inference_graph(self, inputs, return_kv_cache=False, return_last_token=False):
-            policy, cache = self._transformer(inputs, return_kv_cache=return_kv_cache, return_last_token=return_last_token)
+        def _transformer_inference_graph(self, inputs, return_kv_cache=False, return_last_token=False, return_value=False):
+            policy, cache = self._transformer(inputs, return_kv_cache=return_kv_cache, return_last_token=return_last_token, return_value=return_value)
             return policy, cache
 
-        def _transformer_inference(self, inputs, return_kv_cache=False, return_last_token=False):
-            policy, cache = _transformer_inference_graph(self, inputs, return_kv_cache=return_kv_cache, return_last_token=return_last_token)
+        def _transformer_inference(self, inputs, return_kv_cache=False, return_last_token=False, return_value=False):
+            policy, cache = _transformer_inference_graph(self, inputs, return_kv_cache=return_kv_cache, return_last_token=return_last_token, return_value=return_value)
             return policy.numpy(), cache
 
         self._transformer_inference = types.MethodType(_transformer_inference, self)
@@ -760,7 +97,7 @@ class CircuitTransformer:
         self.input_tt = compute_input_tt(self.num_inputs)
 
     def build_model(self):
-        """Explicitly build model variables"""
+        """显式构建模型变量"""
         dummy_inputs = {
             'inputs': tf.zeros((1, self.max_seq_length), dtype=tf.int32),
             'enc_pos_encoding': tf.zeros((1, self.max_seq_length, self.max_tree_depth*2)),
@@ -769,38 +106,7 @@ class CircuitTransformer:
             'enc_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool),
             'dec_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool)
         }
-        _ = self._transformer(dummy_inputs)  # Trigger variable creation
-
-    def freeze_layers(self, freeze_encoder=True):
-        """Freeze encoder layers, only train decoder layers"""
-        self.freeze_encoder = freeze_encoder
-        
-        if freeze_encoder:
-            # freeze all encoder layers
-            self._transformer.encoder_layer.trainable = False
-            
-            # freeze encoder embedding layers
-            self._transformer.enc_embedding_lookup.trainable = False
-            
-            # freeze positional encoding layers
-            self._transformer.position_embedding.trainable = False
-            self._transformer.tree_position_embedding.trainable = False
-            
-            # unfreeze decoder layers
-            self._transformer.decoder_layer.trainable = True
-            self._transformer.dec_embedding_lookup.trainable = True
-
-    def build_model(self):
-        """Explicitly build model variables"""
-        dummy_inputs = {
-            'inputs': tf.zeros((1, self.max_seq_length), dtype=tf.int32),
-            'enc_pos_encoding': tf.zeros((1, self.max_seq_length, self.max_tree_depth*2)),
-            'targets': tf.zeros((1, self.max_seq_length), dtype=tf.int32),
-            'dec_pos_encoding': tf.zeros((1, self.max_seq_length, self.max_tree_depth*2)),
-            'enc_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool),
-            'dec_action_mask': tf.zeros((1, self.max_seq_length, self.vocab_size), dtype=tf.bool)
-        }
-        _ = self._transformer(dummy_inputs)  # Trigger variable creation
+        _ = self._transformer(dummy_inputs)  # 触发变量创建
 
     def freeze_layers(self, freeze_encoder=True):
         """Freeze encoder layers, only train decoder layers"""
@@ -823,7 +129,6 @@ class CircuitTransformer:
 
     def _get_tf_transformer(self):
         transformer = Seq2SeqTransformer(
-        transformer = Seq2SeqTransformer(
             enc_vocab_size=self.vocab_size,
             dec_vocab_size=self.vocab_size,
             embedding_width=self.embedding_width,
@@ -841,13 +146,6 @@ class CircuitTransformer:
             max_tree_depth=self.max_tree_depth,
             add_action_mask_to_inputs=self.add_action_mask_to_input
         )
-
-        if self.freeze_encoder:
-            transformer.encoder_layer.trainable = False
-            transformer.enc_embedding_lookup.trainable = False
-            transformer.position_embedding.trainable = False
-            transformer.tree_position_embedding.trainable = False
-        return transformer
 
         if self.freeze_encoder:
             transformer.encoder_layer.trainable = False
@@ -1162,7 +460,7 @@ class CircuitTransformer:
         return seq_enc, pos_enc
 
     def load(self, ckpt_path):
-        status = self._transformer.load_weights(ckpt_path, by_name=True, skip_mismatch=True)    # in case mismatch
+        status = self._transformer.load_weights(ckpt_path)
         status.expect_partial()         # ignore warnings
         self.ckpt_path = ckpt_path
 
@@ -1186,15 +484,8 @@ class CircuitTransformer:
                               tts_compressed=tts_compressed,
                               w_gate=self.w_gate,
                               w_delay=self.w_delay, 
-                              w_gate=self.w_gate,
-                              w_delay=self.w_delay, 
                               and_always_available=True)
         action_masks = []
-        flag = 1
-        # error_file = "./datasets/t/IWLS_FFWs_app_0.1/0xf000000000000008000000000000000800000000000000000000000000000000_0xffffffffffffc000f00000000000000000000000000000000000000000000000.json"
-        # if fileName == error_file:
-        #     print(seq_enc)
-            
         flag = 1
         # error_file = "./datasets/t/IWLS_FFWs_app_0.1/0xf000000000000008000000000000000800000000000000000000000000000000_0xffffffffffffc000f00000000000000000000000000000000000000000000000.json"
         # if fileName == error_file:
@@ -1204,20 +495,14 @@ class CircuitTransformer:
             # if fileName == error_file and n == '2':
             #     print(f"Valid: {token}")
             action_mask = env.action_masks[-1]          # dec_env.gen_action_mask()
-            # print(f"Valid: {token}")
             if not action_mask[token]:                  # Modified: Jump conflict circuit data.
                 # if fileName == error_file and n == '2':
-                print(f"Invalid: {token}")
-                print("Cannot pass check_conflict. Jump anyway.")
+                # print(f"Invalid: {token}")
+                # print("Cannot pass check_conflict. Jump anyway.")
                 flag = 0
                 # break
             action_masks.append(action_mask)
             env.step(token)
-        if not flag:
-            # print(fileName)
-            return None
-        assert action_mask[token]                   # Problem: current action mask will contadict to the approximate dataset
-           
         if not flag:
             # print(fileName)
             return None
@@ -1253,16 +538,18 @@ class CircuitTransformer:
         if enc_action_masks is None:                # Modified: Jump conflict circuit data.
             return seq_enc, pos_enc, opt_seq_enc, opt_pos_enc, None, None
         dec_action_masks = self.generate_action_masks(tts, self.input_tt, None, opt_seq_enc, True, tts, n="2", fileName=filename)
+        # if filename == "./datasets/t/IWLS_FFWs_app_0.1/0xf000000000000008000000000000000800000000000000000000000000000000_0xffffffffffffc000f00000000000000000000000000000000000000000000000.json":
+        #     print(seq_enc)
+        #     print(encode_aig(roots, num_inputs)[1])
+        #     print(self._encode_postprocess(opt_seq_enc, opt_pos_enc)[0])
+        #     print(opt_pos_enc)
         if dec_action_masks is None:                # Modified: Jump conflict circuit data.
-            print(filename)                         # Check the specific conflicted file.
             return seq_enc, pos_enc, opt_seq_enc, opt_pos_enc, None, None
         opt_seq_enc, opt_pos_enc = self._encode_postprocess(opt_seq_enc, opt_pos_enc)
         return seq_enc, pos_enc, opt_seq_enc, opt_pos_enc, enc_action_masks, dec_action_masks
 
     def load_and_encode_formatted(self, filename):
         seq_enc, pos_enc, opt_seq_enc, opt_pos_enc, enc_action_mask, dec_action_mask = self.load_and_encode(filename)
-        if enc_action_mask is None or dec_action_mask is None:          # Modified: Jump conflict circuit data.
-            return None
         if enc_action_mask is None or dec_action_mask is None:          # Modified: Jump conflict circuit data.
             return None
         inputs = {
@@ -1288,8 +575,6 @@ class CircuitTransformer:
               log_dir='tensorboard',
               excluded_files: list = None,
               freeze_layers=False
-              excluded_files: list = None,
-              freeze_layers=False
               ):
         train_data_dir = train_data_dir + ("/" if train_data_dir[-1] != "/" else "")
         
@@ -1300,9 +585,6 @@ class CircuitTransformer:
 
             if not os.path.exists(ckpt_save_path):
                 os.mkdir(ckpt_save_path)
-
-        if freeze_layers:
-            self.freeze_layers(freeze_encoder=True)
 
         if freeze_layers:
             self.freeze_layers(freeze_encoder=True)
@@ -1348,14 +630,14 @@ class CircuitTransformer:
                                                   dtype=tf.bool)
             }, tf.TensorSpec(shape=(self.max_seq_length,), dtype=tf.int32)
         )
-        print("Creating TensorFlow dataset...")
+        print("正在创建TensorFlow数据集...")
         train_dataset = tf.data.Dataset.from_generator(mp_dataset.train_generator,
                                                        output_signature=output_signature) \
             .batch(batch_size).prefetch(tf.data.AUTOTUNE)
         validation_dataset = tf.data.Dataset.from_generator(mp_dataset.validation_generator,
                                                             output_signature=output_signature) \
             .batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        print("Dataset creation completed")
+        print("数据集创建完成")
         
         if profile:
             if not os.path.exists(log_dir):
@@ -1367,7 +649,7 @@ class CircuitTransformer:
             with mirrored_strategy.scope():
                 transformer = self._get_tf_transformer()
                 if self.ckpt_path is not None:
-                    transformer.load_weights(self.ckpt_path, by_name=True, skip_mismatch=True)  # in case the model has been changed
+                    transformer.load_weights(self.ckpt_path)
                 # learning_rate = CustomSchedule(self.embedding_width)
                 optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
                 # optimizer = keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
@@ -1393,7 +675,7 @@ class CircuitTransformer:
                 print(f"Batch {batch} finished with logs: {logs}")
                 # step = transformer.optimizer.iterations.numpy()
                 with summary_writer.as_default():
-                    # Write loss and accuracy
+                    # 写入损失和准确率
                     tf.summary.scalar('loss', logs['loss'], step=batch)
                     tf.summary.scalar('accuracy', logs['accuracy'], step=batch)
                 pass
@@ -1414,7 +696,7 @@ class CircuitTransformer:
                 save_freq=(len(mp_dataset) * (epochs - initial_epoch) // batch_size) if latest_ckpt_only else 'epoch') # type: ignore
             callbacks.append(checkpoint)
 
-        print("Starting training, preparing to call fit() method")
+        print("开始训练，准备调用 fit() 方法")
         transformer.fit(train_dataset,
                         initial_epoch=initial_epoch,
                         epochs=epochs,
@@ -1457,46 +739,46 @@ class CircuitTransformer:
         if freeze_layers:
             self.freeze_layers(freeze_encoder=True)
 
-        """PPO training loop"""
-        # Initialize optimizers
+        """PPO训练循环"""
+        # 初始化优化器
         policy_optimizer = keras.optimizers.AdamW(learning_rate=policy_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
         value_optimizer = keras.optimizers.Adam(learning_rate=value_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
         
-        # Get all circuit files
+        # 获取所有电路文件
         circuit_files = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)]
         if not circuit_files:
             raise ValueError(f"No circuit files found in directory: {train_data_dir}")
         
-        # Create circuit iterator
+        # 创建电路迭代器
         circuit_iterator = self._circuit_iterator(circuit_files)
         
-        # Training loop
+        # 训练循环
         for epoch in range(epochs):
-            # Collect trajectory data
+            # 收集轨迹数据
             trajectories = []
             for step in range(steps_per_epoch):
                 current_circuit = next(circuit_iterator)
                 
-                # Create environment for current circuit
+                # 创建当前电路的环境
                 env = self._create_circuit_env(current_circuit)
                 state = env._get_obs()
                 done = False
                 episode_data = []
                 
                 while not done:
-                    # Prepare model input
+                    # 准备模型输入
                     inputs = self._prepare_model_input(state)
                     
-                    # Select action using current policy
+                    # 使用当前策略选择动作
                     logits, value = self._transformer_inference(inputs, return_last_token=True)
                     action, log_prob = self._sample_action(logits[0], state['action_mask'])
                     
-                    # Execute action
+                    # 执行动作
                     next_state, reward, done = self._batch_step([env], [action])
                     next_state = next_state[0]
                     reward = reward[0]
                     done = done[0]
-                    # Store transition
+                    # 存储转换
                     episode_data.append({
                         'state': state,
                         'action': action,
@@ -1508,30 +790,30 @@ class CircuitTransformer:
                     
                     state = next_state
                 
-                # Add to trajectory data
+                # 添加到轨迹数据
                 trajectories.append(episode_data)
             
-            # Process trajectory data
+            # 处理轨迹数据
             states, actions, old_log_probs, returns, advantages = self._process_trajectories(
                 trajectories, gamma
             )
             print(f"trajectories length = {len(trajectories)}")
             start_time = time.time()
-            # Update policy
+            # 更新策略
             policy_loss = self._update_policy(
                 states, actions, old_log_probs, advantages, 
                 policy_optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch
             )
             step1_time = time.time()
             print(f"Policy update total time: {step1_time - start_time:.4f} seconds")
-            # Update value function
+            # 更新价值函数
             value_loss = self._update_value_function(
                 states, returns, value_optimizer, batch_size, ppo_train_epoch
             )
             step2_time = time.time()
             print(f"Value update total time: {step2_time - step1_time:.4f} seconds")
 
-            # Print progress
+            # 打印进度
             print(f"Epoch {epoch+1}/{epochs} | "
                 f"Policy Loss: {policy_loss:.4f} | "
                 f"Value Loss: {value_loss:.4f} | "
@@ -1542,35 +824,35 @@ class CircuitTransformer:
                         f"Avg Return: {np.mean(returns):.2f}")
             print(log_msg)
             log_file.write(log_msg + "\n")
-            log_file.flush()  # Ensure immediate write to disk
+            log_file.flush()  # 保证及时写入磁盘
 
-            # Periodically save model
+            # 定期保存模型
             if (epoch + 1) % 5 == 0 and ckpt_save_path is not None:
                 save_path = os.path.join(ckpt_save_path, f"model-{epoch+1:04d}")
                 self._transformer.save_weights(save_path)
                 print(f"Model weights saved at {save_path}")
 
     def _circuit_iterator(self, circuit_files):
-        """Create infinite iterator for circuit files"""
+        """创建电路文件的无限迭代器"""
         while True:
-            # Randomly shuffle circuit file order
+            # 随机打乱电路文件顺序
             np.random.shuffle(circuit_files)
             for circuit_file in circuit_files:
                 yield circuit_file
     
     def _create_circuit_env(self, circuit_file):
-        """Create environment for given circuit file"""
-        # Read circuit
+        """为给定电路文件创建环境"""
+        # 读取电路
         with open(circuit_file, 'r') as f:
             roots_aiger, num_ands, opt_roots_aiger, opt_num_ands = json.load(f)
         
         roots, info = read_aiger(aiger_str=roots_aiger)
         num_inputs, num_outputs = info[1], info[3]
         
-        # Compute truth table
+        # 计算真值表
         tts = compute_tts(roots, num_inputs=num_inputs)
         
-        # Create environment
+        # 创建环境
         return LogicNetworkEnv(
             tts=tts,
             num_inputs=num_inputs,
@@ -1584,29 +866,29 @@ class CircuitTransformer:
         )
     
     def _prepare_model_input(self, state):
-        """Prepare Transformer input format, ensure correct shape"""
-        # Ensure inputs are 2D [1, sequence_length]
+        """准备Transformer的输入格式, 确保正确的形状"""
+        # 确保 inputs 是二维的 [1, sequence_length]
         tokens = state['tokens']
         if len(tokens.shape) == 1:
             inputs = tf.expand_dims(tokens, axis=0)  # [1, seq_len]
         else:
-            inputs = tokens  # Already correct shape
+            inputs = tokens  # 已经是正确的形状
         
-        # Ensure enc_pos_encoding is 3D [batch, sequence_length, features]
+        # 确保 enc_pos_encoding 是三维的 [batch, sequence_length, features]
         pos_enc = state['positional_encodings']
         if len(pos_enc.shape) == 2:  # [seq_len, features]
             enc_pos_encoding = tf.expand_dims(pos_enc, axis=0)  # [1, seq_len, features]
         elif len(pos_enc.shape) == 3:  # [1, seq_len, features]
-            enc_pos_encoding = pos_enc  # Already correct shape
-        elif len(pos_enc.shape) == 4:  # [1, seq_len, 1, features] - need to squeeze
+            enc_pos_encoding = pos_enc  # 已经是正确的形状
+        elif len(pos_enc.shape) == 4:  # [1, seq_len, 1, features] - 需要压缩
             enc_pos_encoding = tf.squeeze(pos_enc, axis=2)  # [1, seq_len, features]
         else:
-            enc_pos_encoding = pos_enc  # Already correct shape
+            enc_pos_encoding = pos_enc  # 已经是正确的形状
         
-        # Ensure enc_action_mask is 4D [batch, sequence_length, 1, vocab_size]
+        # 确保 enc_action_mask 是四维的 [batch, sequence_length, 1, vocab_size]
         action_mask = state['action_mask']
         if len(action_mask.shape) == 1:  # [vocab_size]
-            # Create action mask matching sequence length
+            # 创建与序列长度匹配的动作掩码
             seq_len = tf.shape(inputs)[1]
             enc_action_mask = tf.tile(
                 tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask, axis=0), axis=0), axis=0),
@@ -1637,7 +919,7 @@ class CircuitTransformer:
         if len(state['action_mask'].shape) == 1:  # [vocab_size]
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(state['action_mask'], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         else:
-            # If already higher dimension, take last time step
+            # 如果已经有更高维度，取最后一个时间步
             dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask[-1], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
         
         return {
@@ -1650,7 +932,7 @@ class CircuitTransformer:
         }
 
     def _prepare_batch_input(self, states):
-        MAX_SEQ_LEN = self.max_seq_length  # Use max sequence length set in your model
+        MAX_SEQ_LEN = self.max_seq_length  # 使用你模型中设定的最大序列长度
 
         inputs = []
         enc_pos_encoding = []
@@ -1691,13 +973,13 @@ class CircuitTransformer:
                 padded_mask = np.tile(mask, (MAX_SEQ_LEN, 1))
             enc_action_mask.append(np.expand_dims(padded_mask, axis=1))  # [seq_len, 1, vocab]
 
-            # targets - last token
+            # targets - 最后一个 token
             targets.append([s['tokens'][seq_len - 1]])
 
-            # dec_pos_encoding - last positional encoding
+            # dec_pos_encoding - 最后一个位置编码
             dec_pos_encoding.append([s['positional_encodings'][seq_len - 1]])
 
-            # dec_action_mask - current action mask
+            # dec_action_mask - 当前 action mask
             if mask.ndim == 1:  # [vocab]
                 dec_action_mask.append([[mask]])
             else:
@@ -1715,22 +997,22 @@ class CircuitTransformer:
 
     
     def _sample_action(self, logits, mask):
-        """Sample action based on logits and mask"""
-        # Apply mask to logits (set logits for invalid actions to minimum value)
+        """根据logits和mask采样动作"""
+        # 将mask应用于logits（将不可行动作对应的logits设为极小值）
         masked_logits = np.where(mask, logits, np.finfo(np.float32).min)
         
-        # Compute softmax
+        # 计算softmax
         probs = np.exp(masked_logits - np.max(masked_logits))
         probs /= np.sum(probs)
         probs = np.squeeze(probs)
-        # Sample action
+        # 采样动作
         action = np.random.choice(len(probs), p=probs)
         log_prob = np.log(probs[action])
         
         return action, log_prob
     
     def _process_trajectories(self, trajectories, gamma, lam=0.95):
-        """Process trajectory data, compute returns and advantages"""
+        """处理轨迹数据，计算回报和优势函数"""
         states = []
         actions = []
         old_log_probs = []
@@ -1738,7 +1020,7 @@ class CircuitTransformer:
         advantages = []
         
         for episode in trajectories:
-            # Extract trajectory data
+            # 提取轨迹数据
             episode_states = [step['state'] for step in episode]
             episode_actions = [step['action'] for step in episode]
             episode_rewards = [step['reward'] for step in episode]
@@ -1746,578 +1028,19 @@ class CircuitTransformer:
             episode_log_probs = [step['log_prob'] for step in episode]
             episode_dones = [step['done'] for step in episode]
             
-            # Ensure consistent numeric types
+            # 确保数值类型一致
             episode_rewards = [float(r) for r in episode_rewards]
             episode_values = [float(v) for v in episode_values]
             episode_log_probs = [float(lp) for lp in episode_log_probs]
             
-            # Compute Monte Carlo returns
+            # 计算蒙特卡洛回报
             R = 0.0
             discounted_returns = []
             for r in reversed(episode_rewards):
                 R = r + gamma * R
                 discounted_returns.insert(0, R)
             
-            # Compute Generalized Advantage Estimation (GAE)
-            advantages_ep = []
-            last_gae = 0.0
-            next_value = 0.0
-            next_done = True  # 假设episode结束时done=True
-            
-            for t in reversed(range(len(episode))):
-                if t == len(episode) - 1:
-                    next_non_terminal = 1.0 - float(next_done)
-                    next_value = next_value
-                else:
-                    next_non_terminal = 1.0 - float(episode_dones[t+1])
-                    next_value = episode_values[t+1]
-                
-                delta = episode_rewards[t] + gamma * next_value * next_non_terminal - episode_values[t]
-                gae = delta + gamma * lam * next_non_terminal * last_gae
-                last_gae = gae
-                advantages_ep.insert(0, gae)
-            
-            # 标准化优势函数
-            advantages_ep = np.array(advantages_ep, dtype=np.float32)
-            if advantages_ep.std() > 0:
-                advantages_ep = (advantages_ep - advantages_ep.mean()) / (advantages_ep.std() + 1e-8)
-            
-            # 添加到结果列表
-            states.extend(episode_states)
-            actions.extend(episode_actions)
-            old_log_probs.extend(episode_log_probs)
-            returns.extend(discounted_returns)
-            advantages.extend(advantages_ep)
-        
-        return states, actions, old_log_probs, returns, advantages
-
-
-
-    def _update_policy(self, states, actions, old_log_probs, advantages, optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch):
-        """更新策略网络"""
-        @tf.function(reduce_retracing=True)
-        def train_step(batch_inputs, batch_actions, batch_old_log_probs, batch_advantages, policy_vars):
-            with tf.GradientTape() as tape:
-                policy_loss, kl, _ = self.policy_forward_pass(
-                    batch_inputs, 
-                    batch_actions, 
-                    batch_old_log_probs, 
-                    batch_advantages,
-                    clip_ratio
-                )
-            grads = tape.gradient(policy_loss, policy_vars)
-            return grads, policy_loss, kl
-        # 创建数据集（仅第一次）
-        if not hasattr(self, 'policy_dataset') or self.policy_dataset is None:
-            dataset = tf.data.Dataset.from_tensor_slices({
-                'tokens': tf.stack([s['tokens'] for s in states]),
-                'pos_enc': tf.stack([s['positional_encodings'] for s in states]),
-                'action_mask': tf.stack([s['action_mask'] for s in states]),
-                'actions': tf.convert_to_tensor(actions, dtype=tf.int32),
-                'old_log_probs': tf.convert_to_tensor(old_log_probs, dtype=tf.float32),
-                'advantages': tf.convert_to_tensor(advantages, dtype=tf.float32)
-            }).shuffle(len(states)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-            self.policy_dataset = dataset
-        else:
-            dataset = self.policy_dataset
-        
-        # 获取策略网络变量
-        policy_vars = [var for var in self._transformer.trainable_variables if 'value_head' not in var.name]
-        
-        total_policy_loss = 0
-        total_kl = 0
-        num_batches = 0
-        
-        for ppo_epoch in range(ppo_train_epoch):
-            for batch in dataset:
-                # 准备输入
-                batch_states = [{
-                    'tokens': tokens,
-                    'positional_encodings': pos_enc,
-                    'action_mask': action_mask
-                } for tokens, pos_enc, action_mask in zip(
-                    batch['tokens'], batch['pos_enc'], batch['action_mask']
-                )]
-                inputs = self._prepare_batch_input(batch_states)
-                
-                # 使用预定义计算图执行训练步骤
-                grads, policy_loss, kl = train_step(
-                    inputs,
-                    batch['actions'],
-                    batch['old_log_probs'],
-                    batch['advantages'],
-                    policy_vars
-                )
-                
-                # 应用梯度
-                if grads is not None:
-                    grads, _ = tf.clip_by_global_norm(grads, 1.0)
-                    optimizer.apply_gradients(zip(grads, policy_vars))
-                
-                total_policy_loss += policy_loss
-                total_kl += kl
-                num_batches += 1
-                
-                # 检查KL散度
-                if total_kl / num_batches > 1.5 * target_kl:
-                    print(f"Early stopping at KL divergence {total_kl/num_batches:.4f} > {1.5*target_kl:.4f}")
-                    break
-        
-        # 清理资源
-        K.clear_session()
-        gc.collect()
-        
-        return total_policy_loss / num_batches
-
-    def _update_value_function(self, states, returns, optimizer, batch_size, ppo_train_epoch):
-        """更新价值函数"""
-        # 创建数据集 - 使用 TensorFlow 操作
-        dataset = tf.data.Dataset.from_tensor_slices({
-            'tokens': tf.stack([s['tokens'] for s in states]),
-            'pos_enc': tf.stack([s['positional_encodings'] for s in states]),
-            'action_mask': tf.stack([s['action_mask'] for s in states]),
-            'returns': tf.convert_to_tensor(returns, dtype=tf.float32)
-        })
-        
-        # 应用批处理和预取
-        dataset = dataset.shuffle(len(states)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        
-        total_value_loss = 0
-        num_batches = 0
-        
-        # 获取价值网络变量
-        value_vars = self._transformer.value_head.trainable_variables
-        for epoch in range(ppo_train_epoch):
-            for batch in dataset:
-                # 使用修改后的 _prepare_batch_input 准备输入
-                batch_states = [{
-                    'tokens': tokens,
-                    'positional_encodings': pos_enc,
-                    'action_mask': action_mask
-                } for tokens, pos_enc, action_mask in zip(
-                    batch['tokens'], 
-                    batch['pos_enc'], 
-                    batch['action_mask']
-                )]
-                inputs = self._prepare_batch_input(batch_states)
-                
-                # 准备参数
-                returns_tensor = batch['returns']
-                
-                with tf.GradientTape() as tape:
-                    # 使用图模式计算价值损失
-                    value_loss = self.value_forward_pass(inputs, returns_tensor)
-                
-                # 计算梯度并更新（只更新价值函数相关的权重）
-                grads = tape.gradient(value_loss, value_vars)
-                if grads is not None:  # 确保梯度存在
-                    optimizer.apply_gradients(zip(grads, value_vars))
-                
-                total_value_loss += value_loss
-                num_batches += 1
-        
-        return total_value_loss / (num_batches * ppo_train_epoch)
-    
-    def _log_prob(self, logits, actions):
-        """计算给定动作的对数概率"""
-        # 确保logits是float32类型
-        logits = tf.cast(logits, tf.float32)
-        
-        # 将logits转换为概率分布
-        probs = tf.nn.softmax(logits)
-        
-        # 创建动作的one-hot编码
-        actions_one_hot = tf.one_hot(actions, depth=self.vocab_size, dtype=tf.float32)
-        
-        # 计算对数概率
-        return tf.math.log(tf.reduce_sum(probs * actions_one_hot, axis=-1) + 1e-10)
-
-    def _batch_step(self, envs, actions):
-        """批量执行环境步骤（向量化操作）"""
-        next_states = []
-        rewards = []
-        dones = []
-        
-        for env, action in zip(envs, actions):
-            next_state, reward, done, _ = env.ppo_step(action)
-            next_states.append(next_state)
-            rewards.append(reward)
-            dones.append(done)
-
-        return next_states, np.array(rewards), np.array(dones)
-
-
-
-    @tf.function(reduce_retracing=True)
-    def value_forward_pass(self, inputs, returns):
-        """价值网络前向传播（图模式）"""
-        # 预测价值
-        _, values = self._transformer(inputs, training=True)
-        
-        # 确保数据类型一致 - 将values转换为float32
-        values = tf.cast(values, tf.float32)
-        returns = tf.cast(returns, tf.float32)
-        
-        # 计算价值损失
-        return tf.reduce_mean(tf.square(returns - values))
-
-    @tf.function(reduce_retracing=True)
-    def policy_forward_pass(self, inputs, actions, old_log_probs, advantages, clip_ratio):
-        """策略网络前向传播（图模式）"""
-        # 获取策略网络输出
-        logits, _ = self._transformer(inputs, training=True)
-        
-        # 确保logits是float32类型
-        logits = tf.cast(logits, tf.float32)
-        
-        # 计算新策略的对数概率
-        new_log_probs = self._log_prob(logits, actions)
-        
-        # 确保所有张量都是float32类型
-        new_log_probs = tf.cast(new_log_probs, tf.float32)
-        old_log_probs = tf.cast(old_log_probs, tf.float32)
-        advantages = tf.cast(advantages, tf.float32)
-        
-        # 计算PPO损失
-        ratio = tf.exp(new_log_probs - old_log_probs)
-        surr1 = ratio * advantages
-        surr2 = tf.clip_by_value(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * advantages
-        policy_loss = -tf.reduce_mean(tf.minimum(surr1, surr2))
-        
-        # 计算KL散度
-        kl = tf.reduce_mean(old_log_probs - new_log_probs)
-        
-        return policy_loss, kl, new_log_probs
-
-    def train_ppo(self, 
-                  train_data_dir,
-                  ckpt_save_path = None,
-                  epochs=1000,
-                  steps_per_epoch=10,
-                  batch_size=64,
-                  gamma=0.99,
-                  clip_ratio=0.2,
-                  policy_lr=1e-4,
-                  value_lr=1e-3,
-                  freeze_layers=False,
-                  ppo_train_epoch=2,
-                  target_kl=0.01):
-
-        train_data_dir = train_data_dir + ("/" if train_data_dir[-1] != "/" else "")
-        log_file = open("log/ppo_train_log.txt", "a") 
-        if ckpt_save_path is None:
-            print("WARNING: ckpt_save_path is not specified, the trained model will not be saved during training!")
-        else:
-            ckpt_save_path = ckpt_save_path + ("/" if ckpt_save_path[-1] != "/" else "")
-
-            if not os.path.exists(ckpt_save_path):
-                os.mkdir(ckpt_save_path)
-
-        if freeze_layers:
-            self.freeze_layers(freeze_encoder=True)
-
-        """PPO training loop"""
-        # Initialize optimizers
-        policy_optimizer = keras.optimizers.AdamW(learning_rate=policy_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
-        value_optimizer = keras.optimizers.Adam(learning_rate=value_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9, clipnorm=1.0)
-        
-        # Get all circuit files
-        circuit_files = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)]
-        if not circuit_files:
-            raise ValueError(f"No circuit files found in directory: {train_data_dir}")
-        
-        # Create circuit iterator
-        circuit_iterator = self._circuit_iterator(circuit_files)
-        
-        # Training loop
-        for epoch in range(epochs):
-            # Collect trajectory data
-            trajectories = []
-            for step in range(steps_per_epoch):
-                current_circuit = next(circuit_iterator)
-                
-                # Create environment for current circuit
-                env = self._create_circuit_env(current_circuit)
-                state = env._get_obs()
-                done = False
-                episode_data = []
-                
-                while not done:
-                    # Prepare model input
-                    inputs = self._prepare_model_input(state)
-                    
-                    # Select action using current policy
-                    logits, value = self._transformer_inference(inputs, return_last_token=True)
-                    action, log_prob = self._sample_action(logits[0], state['action_mask'])
-                    
-                    # Execute action
-                    next_state, reward, done = self._batch_step([env], [action])
-                    next_state = next_state[0]
-                    reward = reward[0]
-                    done = done[0]
-                    # Store transition
-                    episode_data.append({
-                        'state': state,
-                        'action': action,
-                        'reward': reward,
-                        'log_prob': log_prob,
-                        'value': value[0][0],
-                        'done': done
-                    })
-                    
-                    state = next_state
-                
-                # Add to trajectory data
-                trajectories.append(episode_data)
-            
-            # Process trajectory data
-            states, actions, old_log_probs, returns, advantages = self._process_trajectories(
-                trajectories, gamma
-            )
-            print(f"trajectories length = {len(trajectories)}")
-            start_time = time.time()
-            # Update policy
-            policy_loss = self._update_policy(
-                states, actions, old_log_probs, advantages, 
-                policy_optimizer, clip_ratio, target_kl, batch_size, ppo_train_epoch
-            )
-            step1_time = time.time()
-            print(f"Policy update total time: {step1_time - start_time:.4f} seconds")
-            # Update value function
-            value_loss = self._update_value_function(
-                states, returns, value_optimizer, batch_size, ppo_train_epoch
-            )
-            step2_time = time.time()
-            print(f"Value update total time: {step2_time - step1_time:.4f} seconds")
-
-            # Print progress
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Policy Loss: {policy_loss:.4f} | "
-                f"Value Loss: {value_loss:.4f} | "
-                f"Avg Return: {np.mean(returns):.2f}")
-            log_msg = (f"Epoch {epoch+1}/{epochs} | "
-                        f"Policy Loss: {policy_loss:.4f} | "
-                        f"Value Loss: {value_loss:.4f} | "
-                        f"Avg Return: {np.mean(returns):.2f}")
-            print(log_msg)
-            log_file.write(log_msg + "\n")
-            log_file.flush()  # Ensure immediate write to disk
-
-            # Periodically save model
-            if (epoch + 1) % 5 == 0 and ckpt_save_path is not None:
-                save_path = os.path.join(ckpt_save_path, f"model-{epoch+1:04d}")
-                self._transformer.save_weights(save_path)
-                print(f"Model weights saved at {save_path}")
-
-    def _circuit_iterator(self, circuit_files):
-        """Create infinite iterator for circuit files"""
-        while True:
-            # Randomly shuffle circuit file order
-            np.random.shuffle(circuit_files)
-            for circuit_file in circuit_files:
-                yield circuit_file
-    
-    def _create_circuit_env(self, circuit_file):
-        """Create environment for given circuit file"""
-        # Read circuit
-        with open(circuit_file, 'r') as f:
-            roots_aiger, num_ands, opt_roots_aiger, opt_num_ands = json.load(f)
-        
-        roots, info = read_aiger(aiger_str=roots_aiger)
-        num_inputs, num_outputs = info[1], info[3]
-        
-        # Compute truth table
-        tts = compute_tts(roots, num_inputs=num_inputs)
-        
-        # Create environment
-        return LogicNetworkEnv(
-            tts=tts,
-            num_inputs=num_inputs,
-            max_length=self.max_seq_length,
-            eos_id=self.eos_id,
-            pad_id=self.pad_id,
-            max_tree_depth=self.max_tree_depth,
-            max_inference_tree_depth=16,
-            use_controllability_dont_cares=True,
-            verbose=0
-        )
-    
-    def _prepare_model_input(self, state):
-        """Prepare Transformer input format, ensure correct shape"""
-        # Ensure inputs are 2D [1, sequence_length]
-        tokens = state['tokens']
-        if len(tokens.shape) == 1:
-            inputs = tf.expand_dims(tokens, axis=0)  # [1, seq_len]
-        else:
-            inputs = tokens  # Already correct shape
-        
-        # Ensure enc_pos_encoding is 3D [batch, sequence_length, features]
-        pos_enc = state['positional_encodings']
-        if len(pos_enc.shape) == 2:  # [seq_len, features]
-            enc_pos_encoding = tf.expand_dims(pos_enc, axis=0)  # [1, seq_len, features]
-        elif len(pos_enc.shape) == 3:  # [1, seq_len, features]
-            enc_pos_encoding = pos_enc  # Already correct shape
-        elif len(pos_enc.shape) == 4:  # [1, seq_len, 1, features] - need to squeeze
-            enc_pos_encoding = tf.squeeze(pos_enc, axis=2)  # [1, seq_len, features]
-        else:
-            enc_pos_encoding = pos_enc  # Already correct shape
-        
-        # Ensure enc_action_mask is 4D [batch, sequence_length, 1, vocab_size]
-        action_mask = state['action_mask']
-        if len(action_mask.shape) == 1:  # [vocab_size]
-            # Create action mask matching sequence length
-            seq_len = tf.shape(inputs)[1]
-            enc_action_mask = tf.tile(
-                tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask, axis=0), axis=0), axis=0),
-                [1, seq_len, 1, 1]
-            )  # [1, seq_len, 1, vocab_size]
-        elif len(action_mask.shape) == 2:  # [seq_len, vocab_size]
-            enc_action_mask = tf.expand_dims(tf.expand_dims(action_mask, axis=0), axis=2)  # [1, seq_len, 1, vocab_size]
-        elif len(action_mask.shape) == 3:  # [1, seq_len, vocab_size]
-            enc_action_mask = tf.expand_dims(action_mask, axis=2)  # [1, seq_len, 1, vocab_size]
-        else:
-            enc_action_mask = action_mask  # 已经是正确的形状
-        
-        # 处理 targets - 使用最后一个token，确保形状为 [batch, 1]
-        if tf.shape(inputs)[1] > 0:
-            last_token = inputs[0, -1]  # 获取最后一个token
-            targets = tf.expand_dims(tf.expand_dims(last_token, axis=0), axis=0)  # [1, 1]
-        else:
-            targets = tf.zeros((1, 1), dtype=tf.int32)
-        
-        # 处理 dec_pos_encoding - 使用最后一个位置编码，确保形状为 [batch, 1, features]
-        if tf.shape(enc_pos_encoding)[1] > 0:
-            last_pos_enc = enc_pos_encoding[0, -1, :]  # 获取最后一个位置编码
-            dec_pos_encoding = tf.expand_dims(tf.expand_dims(last_pos_enc, axis=0), axis=0)  # [1, 1, features]
-        else:
-            dec_pos_encoding = tf.zeros((1, 1, self.max_tree_depth * 2), dtype=tf.float32)
-        
-        # 处理 dec_action_mask - 使用当前动作掩码，确保形状为 [batch, 1, 1, vocab_size]
-        if len(state['action_mask'].shape) == 1:  # [vocab_size]
-            dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(state['action_mask'], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
-        else:
-            # If already higher dimension, take last time step
-            dec_action_mask = tf.expand_dims(tf.expand_dims(tf.expand_dims(action_mask[-1], axis=0), axis=0), axis=0)  # [1, 1, 1, vocab_size]
-        
-        return {
-            'inputs': inputs,
-            'enc_pos_encoding': enc_pos_encoding,
-            'enc_action_mask': enc_action_mask,
-            'targets': targets,
-            'dec_pos_encoding': dec_pos_encoding,
-            'dec_action_mask': dec_action_mask
-        }
-
-    def _prepare_batch_input(self, states):
-        MAX_SEQ_LEN = self.max_seq_length  # Use max sequence length set in your model
-
-        inputs = []
-        enc_pos_encoding = []
-        enc_action_mask = []
-        targets = []
-        dec_pos_encoding = []
-        dec_action_mask = []
-
-        for s in states:
-            seq_len = s['tokens'].shape[0]
-
-            # tokens padding
-            padded_tokens = np.pad(
-                s['tokens'],
-                (0, MAX_SEQ_LEN - seq_len),
-                constant_values=self.pad_id
-            )
-            inputs.append(padded_tokens)
-
-            # pos_enc padding
-            pos_enc = s['positional_encodings']
-            padded_pos_enc = np.pad(
-                pos_enc,
-                ((0, MAX_SEQ_LEN - seq_len), (0, 0)),
-                constant_values=0.0
-            )
-            enc_pos_encoding.append(padded_pos_enc)
-
-            # action mask padding
-            mask = s['action_mask']
-            if mask.ndim == 2:  # [seq_len, vocab_size]
-                padded_mask = np.pad(
-                    mask,
-                    ((0, MAX_SEQ_LEN - seq_len), (0, 0)),
-                    constant_values=False
-                )
-            else:  # [vocab_size]
-                padded_mask = np.tile(mask, (MAX_SEQ_LEN, 1))
-            enc_action_mask.append(np.expand_dims(padded_mask, axis=1))  # [seq_len, 1, vocab]
-
-            # targets - last token
-            targets.append([s['tokens'][seq_len - 1]])
-
-            # dec_pos_encoding - last positional encoding
-            dec_pos_encoding.append([s['positional_encodings'][seq_len - 1]])
-
-            # dec_action_mask - current action mask
-            if mask.ndim == 1:  # [vocab]
-                dec_action_mask.append([[mask]])
-            else:
-                dec_action_mask.append([[mask[-1]]])
-
-        # Convert to tensor
-        return {
-            'inputs': tf.convert_to_tensor(inputs, dtype=tf.int32),  # [B, MAX_SEQ_LEN]
-            'enc_pos_encoding': tf.convert_to_tensor(enc_pos_encoding, dtype=tf.float32),  # [B, MAX_SEQ_LEN, D]
-            'enc_action_mask': tf.convert_to_tensor(enc_action_mask, dtype=tf.bool),  # [B, MAX_SEQ_LEN, 1, V]
-            'targets': tf.convert_to_tensor(targets, dtype=tf.int32),  # [B, 1]
-            'dec_pos_encoding': tf.convert_to_tensor(dec_pos_encoding, dtype=tf.float32),  # [B, 1, D]
-            'dec_action_mask': tf.convert_to_tensor(dec_action_mask, dtype=tf.bool),  # [B, 1, 1, V]
-        }
-
-    
-    def _sample_action(self, logits, mask):
-        """Sample action based on logits and mask"""
-        # Apply mask to logits (set logits for invalid actions to minimum value)
-        masked_logits = np.where(mask, logits, np.finfo(np.float32).min)
-        
-        # Compute softmax
-        probs = np.exp(masked_logits - np.max(masked_logits))
-        probs /= np.sum(probs)
-        probs = np.squeeze(probs)
-        # Sample action
-        action = np.random.choice(len(probs), p=probs)
-        log_prob = np.log(probs[action])
-        
-        return action, log_prob
-    
-    def _process_trajectories(self, trajectories, gamma, lam=0.95):
-        """Process trajectory data, compute returns and advantages"""
-        states = []
-        actions = []
-        old_log_probs = []
-        returns = []
-        advantages = []
-        
-        for episode in trajectories:
-            # Extract trajectory data
-            episode_states = [step['state'] for step in episode]
-            episode_actions = [step['action'] for step in episode]
-            episode_rewards = [step['reward'] for step in episode]
-            episode_values = [step['value'] for step in episode]
-            episode_log_probs = [step['log_prob'] for step in episode]
-            episode_dones = [step['done'] for step in episode]
-            
-            # Ensure consistent numeric types
-            episode_rewards = [float(r) for r in episode_rewards]
-            episode_values = [float(v) for v in episode_values]
-            episode_log_probs = [float(lp) for lp in episode_log_probs]
-            
-            # Compute Monte Carlo returns
-            R = 0.0
-            discounted_returns = []
-            for r in reversed(episode_rewards):
-                R = r + gamma * R
-                discounted_returns.insert(0, R)
-            
-            # Compute Generalized Advantage Estimation (GAE)
+            # 计算广义优势估计 (GAE)
             advantages_ep = []
             last_gae = 0.0
             next_value = 0.0
@@ -2567,8 +1290,6 @@ class CircuitTransformer:
                  return_envs=False,
                  w_gate=1,
                  w_delay=0
-                 w_gate=1,
-                 w_delay=0
                  ):
         if self.ckpt_path is None:
             print("no checkpoint loaded, downloading from https://huggingface.co/snowkylin/circuit-transformer ...")
@@ -2607,10 +1328,6 @@ class CircuitTransformer:
                                                   w_gate=w_gate,
                                                   w_delay=w_delay
                                                   )
-                                                  return_envs,
-                                                  w_gate=w_gate,
-                                                  w_delay=w_delay
-                                                  )
         return optimized_aigs
 
     def optimize_batch(self,
@@ -2632,9 +1349,6 @@ class CircuitTransformer:
                        return_envs=False,
                        return_mcts_roots=False,
                        return_input_encodings=False,
-                       puct_explore_ratio=1.,
-                       w_gate=1,
-                       w_delay=0
                        puct_explore_ratio=1.,
                        w_gate=1,
                        w_delay=0
@@ -2688,8 +1402,6 @@ class CircuitTransformer:
             tts_compressed=None if tts_compressed is None else tts_compressed[i],
             eos_id=self.eos_id,
             pad_id=self.pad_id,
-            w_gate = w_gate,
-            w_delay = w_delay,
             w_gate = w_gate,
             w_delay = w_delay,
             verbose=self.verbose)
@@ -2845,5 +1557,4 @@ if __name__ == "__main__":
     for i, (aig, optimized_aig) in enumerate(zip(aigs, optimized_aigs_with_mcts)):
         print("aig %d #(AND) from %d to %d, equivalence check: %r" %
               (i, count_num_ands(aig), count_num_ands(optimized_aig), cec(aig, optimized_aig)))
-              
               

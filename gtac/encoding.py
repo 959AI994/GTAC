@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from circuit_transformer.utils import Node, NodeWithInv
+from gtac.utils import Node, NodeWithInv
 
 '''
 for 8-input, 2-output circuits

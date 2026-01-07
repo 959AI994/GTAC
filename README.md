@@ -10,9 +10,9 @@ This repository provides an implementation of GTAC for **approximate logic synth
 
 ## Repository Structure
 
-- `circuit_transformer/`: core library (encoding, training, inference, MCTS, utilities)
-  - `circuit_transformer/model/`: training + inference implementations
-  - `circuit_transformer/bin/`: bundled EDA tools (`abc`, `aigtoaig`) used by the pipeline
+- `gtac/`: core library (encoding, training, inference, MCTS, utilities)
+  - `gtac/model/`: training + inference implementations
+  - `gtac/bin/`: bundled EDA tools (`abc`, `aigtoaig`) used by the pipeline
 - `scripts/utilities/run_example.py`: **single entry-point example** for training + inference (used in this README)
 - `requirements.txt`: Python dependencies
 
@@ -80,9 +80,9 @@ pip install -r requirements.txt
 
 ### Tooling Notes (ABC / AIGER utilities)
 
-This repo bundles the required binaries under `circuit_transformer/bin/` and resolves them automatically in `circuit_transformer/utils.py`.
+This repo bundles the required binaries under `gtac/bin/` and resolves them automatically in `gtac/utils.py`.
 
-- On Linux, ensure they are executable (e.g., `chmod +x circuit_transformer/bin/abc circuit_transformer/bin/aigtoaig`).
+- On Linux, ensure they are executable (e.g., `chmod +x gtac/bin/abc gtac/bin/aigtoaig`).
 - On Windows, the bundled binaries should work without `chmod`.
 
 ### TensorFlow / CUDA Notes
