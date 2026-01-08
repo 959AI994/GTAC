@@ -79,8 +79,8 @@ class CircuitTransformer:
         self._transformer = self._get_tf_transformer()
 
         if self.ckpt_path is not None:
-            # self.build_model()  # 先构建模型变量
-            self.load(self.ckpt_path)  # 再加载权重
+            # self.build_model() 
+            self.load(self.ckpt_path)  
 
         @tf.function(reduce_retracing=True)
         def _transformer_inference_graph(self, inputs, return_kv_cache=False, return_last_token=False, return_value=False):

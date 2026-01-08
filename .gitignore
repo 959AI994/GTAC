@@ -260,7 +260,7 @@ _gpgbuilder
 gtac/tensorboard/
 **/events.out.tfevents*
 **/*.xplane.pb
-official/
+# official/
 orbit/
 tensorflow_models/
 models/
