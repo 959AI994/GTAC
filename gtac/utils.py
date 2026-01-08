@@ -201,53 +201,8 @@ def compute_tts(roots: list[NodeWithInv], num_inputs=None, input_tt=None):
         input_tt = compute_input_tt(num_inputs)
     return [compute_tt(root, input_tt=input_tt) for root in roots]
 
-# def check_conflict(tree_stack: list[NodeWithInv], tt, input_tt, cache):         # Original function
-#     tt_size = len(tt)
-#     b = input_tt.copy()
-#     n = [bitarray.util.zeros(tt_size) for _ in input_tt]   # whether is unknown
-#     for node in reversed(tree_stack):
-#         if node.right is None:
-#             for i in range(len(input_tt)):
-#                 n[i] = b[i] | n[i]              # set n[i] to True for those b[i] is True (1 AND U = U)
-#         else:
-#             left_tt = cache[node.left]          # all the left child have a known truth table
-#             for i in range(len(input_tt)):
-#                 b[i] = b[i] & left_tt
-#                 n[i] = n[i] & left_tt                     # set n[i] to False for those left_tt[i] is False (0 AND U = 0)
-#         if node.inverted:
-#             for i in range(len(input_tt)):
-#                 b[i] = ~b[i]
-#     has_conflict = bitarray.bitarray([((~n[i]) & (b[i] ^ tt)).any() for i in range(len(input_tt))])   # any n[i] = False and b[i] != tt[i]
-#     completeness = bitarray.bitarray([not n[i].any() for i in range(len(input_tt))])    # whether all the outputs are known
-#     return has_conflict, completeness
-
-# def check_conflict(tree_stack: list[NodeWithInv], tt, input_tt, cache, error_tolerence = 0.4):         # Modified Approximate function
-#     tt_size = len(tt)
-#     b = input_tt.copy()
-#     n = [bitarray.util.zeros(tt_size) for _ in input_tt]   # whether is unknown, 1: unknown, 0: known
-#     for node in reversed(tree_stack):
-#         if node.right is None:
-#             for i in range(len(input_tt)):
-#                 n[i] = b[i] | n[i]              # set n[i] to True for those b[i] is True (1 AND U = U)
-#         else:
-#             left_tt = cache[node.left]          # all the left child have a known truth table
-#             for i in range(len(input_tt)):
-#                 b[i] = b[i] & left_tt
-#                 n[i] = n[i] & left_tt                     # set n[i] to False for those left_tt[i] is False (0 AND U = 0)
-#         if node.inverted:
-#             for i in range(len(input_tt)):
-#                 b[i] = ~b[i]
-#     error_rate = 0
-#     for i in range(len(input_tt)):
-#         error_rate = ((~n[i] & (b[i] ^ tt)).count() / max(1, len(tt)))
-#         print(error_rate)
-#     has_conflict = bitarray.bitarray([((~n[i] & (b[i] ^ tt)).count() / max(1, len(tt))) > error_tolerence for i in range(len(input_tt))])    
-#     completeness = bitarray.bitarray([not n[i].any() for i in range(len(input_tt))])    # whether all the outputs are known
-#     return has_conflict, completeness
-
 def check_conflict(tree_stack: list[NodeWithInv], tt, input_tt, current_tt_conflict, cache, tolerance=0.0, eta=0.01):
-    # print(input_tt)
-    # print(tolerance)
+
     tt_size = len(tt)
     b = input_tt.copy()
     n = [bitarray.util.zeros(tt_size) for _ in input_tt]   # whether is unknown, 1: unknown, 0: known
@@ -271,14 +226,10 @@ def check_conflict(tree_stack: list[NodeWithInv], tt, input_tt, current_tt_confl
         allowed_error = int(tolerance * tt_size) if tolerance is not None else 0
         if not n[i].any():  # if complete
             diff = (b[i] ^ tt) & ~n[i]
-            # x = diff.copy()
-            # print(f"diff={diff}")
-            # print(f"len(current_tt_conflict)={len(current_tt_conflict)}")
+          
             for j in range(len(current_tt_conflict)):       # iterate among constructed output
                 diff = diff | current_tt_conflict[j]
-            # if len(current_tt_conflict) > 0:
-            #     print(f"diff={diff}")
-            #     print(f"x={x}")
+    
             error_count = diff.count()
             # print(error_count / tt_size)
             has_conflict[i] = (error_count > allowed_error) # and (error_count + U_count*eta > allowed_error)
@@ -636,13 +587,7 @@ def write_aiger(root: NodeWithInv | list[NodeWithInv], filename: str = None, wit
         for i, r in enumerate(root):
             if r.output_symbol is not None:
                 aiger_str += 'o%d %s\n' % (i, r.output_symbol)
-            # if r.output_symbol is not None:
-            #     for s in r.output_symbol:
-            #         if s not in output_used_symbols:
-            #             selected_s = s
-            #             break
-            #     aiger_str += 'o%d %s\n' % (i, selected_s)
-            #     output_used_symbols.add(selected_s)
+
     if filename is not None:
         filename_without_ext, file_ext = os.path.splitext(filename)
         with open(filename_without_ext + ".aag", 'w', newline='\n') as f:
@@ -912,23 +857,7 @@ class MPDataset:
         self.queue = multiprocessing.Queue()
         # self.pool = multiprocessing.Pool(num_processes)
         self.chunk_size = 128 * 8
-        # self.mapped_data_dir = tempfile.mkdtemp()
-        #
-        # def run(num_processes, mapping_func, train_data, chunk_size, q):
-        #     print("process start running")
 
-        #     pool = multiprocessing.Pool(num_processes)
-        #     chunk_id = 0
-        #     while True:
-        #         if q.qsize() < chunk_size:
-        #             for mapped_data in pool.imap_unordered(mapping_func, train_data[chunk_id * chunk_size: (chunk_id + 1) * chunk_size], chunksize=128):
-        #                 if not isinstance(mapped_data, Exception):
-        #                     q.put(mapped_data)
-        #             chunk_id += 1
-        #             if chunk_id * chunk_size >= len(train_data):
-        #                 chunk_id = 0
-        #         else:
-        #             time.sleep(0.1)
         
         if self.num_processes > 1:
             self.process = multiprocessing.Process(

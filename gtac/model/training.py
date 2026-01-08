@@ -110,8 +110,7 @@ def train(self,
         transformer = self._transformer
         # learning_rate = CustomSchedule(self.embedding_width)
         optimizer = keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.9, beta_2=0.98, epsilon=1e-9) # for pretraining
-        # optimizer = keras.optimizers.Adam(learning_rate=1e-6, beta_1=0.9, beta_2=0.98, epsilon=1e-9) # for finetuning
-        # optimizer = keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+
         transformer.compile(
             optimizer=optimizer,
             loss=masked_loss,
@@ -121,12 +120,7 @@ def train(self,
     class LogCallback(keras.callbacks.Callback):
         def on_train_batch_end(self, batch, logs=None):
             print(f"Batch {batch} finished with logs: {logs}")
-            # step = transformer.optimizer.iterations.numpy()
-            # with summary_writer.as_default():
-            #     # Write loss and accuracy
-            #     tf.summary.scalar('loss', logs['loss'], step=batch)
-            #     tf.summary.scalar('accuracy', logs['accuracy'], step=batch)
-            # pass
+
 
         def on_epoch_end(self, epoch, logs=None):
             snapshot = tracemalloc.take_snapshot()

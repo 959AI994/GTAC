@@ -276,10 +276,7 @@ class LogicNetworkEnv:
             node = int_to_node(token, self.num_inputs)
             # print(f"token:{token}")
             if len(self.tree_stack) == 0:
-                # print(f"len(roots)={len(self.roots)}")
-                # print(f"len(tree_stack)={len(self.tree_stack)}")
-                # print(f"len(self.roots)={len(self.roots)}")
-                # print(f"self.cur_root_id={self.cur_root_id-1}")
+
                 if len(self.roots) > 0:
                     tt_bitarray = compute_tt(
                         self.roots[self.cur_root_id-1],
@@ -357,15 +354,6 @@ class LogicNetworkEnv:
         self.tokens.append(token)
         self.t += 1
 
-        # current_delay = compute_critical_path(self.roots)
-        
-        # compute delta delay
-        # delta_delay = self.prev_delay - current_delay
-        # reward = (
-        #     self.w_gate * reward +
-        #     self.w_delay * delta_delay
-        # )
-        # self.prev_delay = current_delay
         self.rewards.append(reward)
         if len(self.tree_stack) == 0 and self.cur_root_id < self.num_outputs and self.use_controllability_dont_cares:
             self.initialize_care_set_tt()

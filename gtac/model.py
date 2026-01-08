@@ -22,46 +22,11 @@ import keras.backend as K
 import gc
 import keras.backend as K
 import gc
-# from tensorflow import keras
-
-# import keras
-# from tensorflow import keras
-# import tensorflow.keras
 import sys
-# replace your path
 sys.path.append('./')
-
 from tensorflow._models import nlp
-
-
-
-
-
-
-
-
-
 from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
 from gtac.utils import *
-# from tensorflow.keras.optimizers import Adam
-
-
-
-'''
-for 8-input, 2-output circuits
-Token(int):
-0: PAD
-1: EOS
-2,4,6,...,16: PI1, PI2, PI3, ... , PI8
-3,5,7,...,17: ~PI1, ~PI2, ~PI3, ..., ~PI8
-18: AND
-19: NAND
-
-Newly add:
-20: constant 0
-21: constant 1
-'''
-
 
 def node_to_int(root: NodeWithInv, num_inputs: int):
     # zero for [PAD] that will be masked
@@ -732,7 +697,6 @@ class CircuitTransformer:
         self.constant_1_id = num_inputs * 2 + 5
         self.w_gate = w_gate
         self.w_delay = w_delay
-        # https://www.tensorflow.org/guide/mixed_precision
         if mixed_precision:
             keras.mixed_precision.set_global_policy('mixed_float16')
         self._transformer = self._get_tf_transformer()

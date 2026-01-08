@@ -414,8 +414,6 @@ def train_ppo(self,
                 targets = np.concatenate([targets, targets_new], axis=1)
                 dec_pos_encoding = np.concatenate([dec_pos_encoding, pos_encodings], axis=1)
 
-            # next_states, rewards, dones = self._batch_step(envs, actions)
-            # next_states: list of state dicts, rewards: np.array([B]), dones: np.array([B])
 
             # Vectorized trajectory recording to improve GPU utilization
             for k in range(batch_envs):
@@ -479,44 +477,10 @@ def train_ppo(self,
             if 'dones' in locals():
                 del dones
         
-        # for step in trajectories:
-        #     print(f"step length: {len(step)}")
-        #     print(f"step[0]['state'] length: {len(step[0]['state'])}")
 
         # First record trajectory information for logging
         num_episodes = len(trajectories)
 
-        # # Print complete token sequences for each episode (for debugging)
-        # print("=" * 80)
-        # print("COMPLETE TOKEN SEQUENCES FOR DEBUGGING")
-        # print("=" * 80)
-
-        # for i, (ep, env_idx) in enumerate(trajectories):
-        #     if len(ep) > 0:
-        #         # Extract token sequence from each step
-        #         token_sequence = []
-        #         for step in ep:
-        #             # Find the action in the step data
-        #             if 'action' in step:
-        #                 token_sequence.append(step['action'])
-        #             else:
-        #                 # If action not directly available, try to find it in the step data
-        #                 token_sequence.append("UNKNOWN")
-
-        #         print(f"Circuit {i+1} (from env {env_idx}): {token_sequence}")
-        #         print(f"  Length: {len(token_sequence)} tokens")
-        #         print(f"  Final reward: {ep[-1]['reward'] if ep else 'N/A'}")
-        #         if env_idx < len(envs):
-        #             print(f"  Success: {envs[env_idx].success}")
-        #             print(f"  Roots: {len(envs[env_idx].roots)}")
-        #             print(f"  Tree stack: {len(envs[env_idx].tree_stack)}")
-        #             print(f"  Outputs: {envs[env_idx].num_outputs}")
-        #             print(f"  aig: {write_aiger(aigs[env_idx])}")
-        #         else:
-        #             print(f"  Success: N/A (env index out of range)")
-        #             print(f"  Roots: N/A (env index out of range)")
-        #             print(f"  Tree stack: N/A (env index out of range)")
-        # print("=" * 80)
 
         all_rewards = []
         for ep, _ in trajectories:  # Unpack the tuple (ep, env_idx)
@@ -539,9 +503,6 @@ def train_ppo(self,
         # Additional cleanup after trajectory processing
         import gc
         gc.collect()
-        
-        # Note: Removed clear_session to prevent performance degradation
-        # TensorFlow will manage memory automatically
         
 
         print(f"collected {num_episodes} episodes this epoch")
@@ -566,14 +527,10 @@ def train_ppo(self,
             completion_rate = len(completed_returns) / len(returns_proc) * 100
 
             print(f"Return range: min={returns_array.min():.4f}, max={returns_array.max():.4f}, mean={returns_array.mean():.4f}")
-            # print(f"Advantage range: min={advantages_array.min():.4f}, max={advantages_array.max():.4f}, mean={advantages_array.mean():.4f}")
-            # print(f"Episode completion rate: {completion_rate:.1f}% ({len(completed_returns)}/{len(returns_proc)} episodes)")
 
             def write_return_stats():
                 log_file.write(f"Epoch {epoch+1}/{epochs} | Return range: min={returns_array.min():.4f}, max={returns_array.max():.4f}, mean={returns_array.mean():.4f}\n")
             safe_file_operation(write_return_stats)
-            # log_file.write(f"Epoch {epoch+1}/{epochs} | Advantage range: min={advantages_array.min():.4f}, max={advantages_array.max():.4f}, mean={advantages_array.mean():.4f}\n")
-            # log_file.write(f"Epoch {epoch+1}/{epochs} | Episode completion rate: {completion_rate:.1f}% ({len(completed_returns)}/{len(returns_proc)} episodes)\n")
 
             if completed_returns:
                 completed_returns_array = np.array(completed_returns)
@@ -692,18 +649,11 @@ def train_ppo(self,
         if hasattr(self, "_training_action_masks"):
             del self._training_action_masks
         
-        # CRITICAL FIX: Never clear tf.function caches to prevent update time spikes
-        # Keep cached functions to avoid performance degradation
-        # This is the key fix for update time growth issue
         pass
         
         import gc
         gc.collect()
         
-        # Note: Removed clear_session to prevent performance degradation
-        # TensorFlow will manage memory automatically
-        
-        # Force CUDA cache cleanup
         try:
             import torch
             if torch.cuda.is_available():
@@ -788,13 +738,6 @@ def train_ppo(self,
                             val_delay.append(optimized_delay)
                             val_original_delay.append(original_delay)
 
-                            # Record optimization effect
-                            # improvement = original_ands - optimized_ands
-                            # if improvement > 0:
-                            #     print(f"Circuit {m}: {original_ands} -> {optimized_ands} ANDs (improvement: {improvement})")
-                            # elif improvement < 0:
-                            #     print(f"Circuit {m}: {original_ands} -> {optimized_ands} ANDs (degradation: {abs(improvement)})")
-                        
         finally:
             tf.config.run_functions_eagerly(False)
             avg_area_ori = np.mean(val_original_ands) if val_original_ands else 0
@@ -837,8 +780,6 @@ def train_ppo(self,
                 should_save = False
                 save_reason = ""
 
-                # Check if validation area improved (only save if area is better)
-                # Note: avg_area is only defined if validation ran
                 if avg_area < self._best_val_area:
                     should_save = True
                     save_reason = f"Better validation area: {avg_area:.4f} < {self._best_val_area:.4f}"
@@ -905,8 +846,6 @@ def train_ppo(self,
             import gc
             gc.collect()
             
-            # Note: Removed frequent clear_session to prevent performance degradation
-            # Only clear session when memory usage is critically high
 
             # Clear CUDA cache
             try:
@@ -916,9 +855,7 @@ def train_ppo(self,
             except ImportError:
                 pass
             
-            # Simple memory management: only clear session when absolutely necessary to prevent OOM
             try:
-                # import tensorflow as tf  # Remove local import, use global import
                 gpu_devices = tf.config.list_physical_devices('GPU')
                 if gpu_devices:
                     gpu_memory_info = tf.config.experimental.get_memory_info('GPU:0')
@@ -1100,9 +1037,6 @@ def _prepare_batch_input(self, states):
       - dec_action_mask: either (dec_seq, vocab) or (a, dec_seq, vocab) -> collapse to (dec_seq, vocab)
     Returns dict of tensors ready to feed the transformer.
     """
-    # print(f"Raw states[0] shapes:")
-    # for key, val in states[0].items():
-    #     print(f"  {key}: {np.array(val).shape}")
 
     def stack_np(arr_list):
         return np.stack(arr_list, axis=0)
@@ -1142,17 +1076,6 @@ def _prepare_batch_input(self, states):
     dec_pos_np = stack_np(dec_pos_encoding)       # maybe (B, a, dec_seq, pos_dim) or (B, dec_seq, pos_dim)
     dec_mask_np = stack_np(dec_action_mask)       # maybe (B, a, dec_seq, V) or (B, dec_seq, V)
 
-    # print(f"After stacking shapes:")
-    # print(f"  inputs: {inp_np.shape}")
-    # print(f"  enc_pos_encoding: {enc_pos_np.shape}")
-    # print(f"  enc_action_mask: {enc_mask_np.shape}")
-    # print(f"  targets: {tgt_np.shape}")
-    # print(f"  dec_pos_encoding: {dec_pos_np.shape}")
-    # print(f"  dec_action_mask: {dec_mask_np.shape}")
-
-    # Collapse extra dimensions if present
-    # The goal is to get the expected shapes for transformer input:
-    # inputs: (B, seq_len), enc_pos_encoding: (B, seq_len, pos_dim), etc.
     
     def collapse_if_needed(arr, expected_ndim):
         """Helper function to collapse dimensions if needed"""
@@ -1206,13 +1129,7 @@ def _prepare_batch_input(self, states):
     assert tgt_np.ndim == 2, f"targets must be rank-2 after preprocessing, got {tgt_np.shape}"
     assert dec_pos_np.ndim == 3, f"dec_pos_encoding must be rank-3 after preprocessing, got {dec_pos_np.shape}"
     assert dec_mask_np.ndim == 3, f"dec_action_mask must be rank-3 after preprocessing, got {dec_mask_np.shape}"
-    # print(f"inputs: {inputs}")
-    # print(f"enc_pos_encoding: {enc_pos_encoding}")
-    # print(f"enc_action_mask: {enc_action_mask}")
-    # print(f"targets: {targets}")
-    # print(f"dec_pos_encoding: {dec_pos_encoding}")
-    # print(f"dec_action_mask: {dec_action_mask}")
-    # Convert to tensors with desired dtypes
+
     return {
         'inputs': tf.convert_to_tensor(inp_np, dtype=tf.int32),                # [B, seq]
         'enc_pos_encoding': tf.convert_to_tensor(enc_pos_np, dtype=tf.float32),# [B, seq, pos_dim]
@@ -1592,12 +1509,7 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
     actions_tensor = tf.convert_to_tensor(actions, dtype=tf.int32)
     old_log_probs_tensor = tf.convert_to_tensor(old_log_probs, dtype=tf.float32)
     advantages_tensor = tf.convert_to_tensor(advantages, dtype=tf.float32)
-    # print(f"inputs_batch={inputs_batch}")
-    # print(f"actions_tensor={actions_tensor}")
-    # print(f"old_log_probs_tensor={old_log_probs_tensor}")
-    # print(f"advantages_tensor={advantages_tensor}")
-    # Create dataset without caching to avoid memory accumulation
-    # Use stored action masks instead of dec_action_mask from inputs_batch
+
     training_action_masks = tf.convert_to_tensor(self._training_action_masks, dtype=tf.bool)
     training_action_masks = tf.expand_dims(training_action_masks, axis=1)  # [batch_size, 1, vocab_size]
     
@@ -1639,11 +1551,6 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
                 # Use fixed temperature 1.0 for consistency with training
                 logits = logits / 1.0
 
-                # If logits is 3D, take the last time step
-                # if tf.rank(logits) == 3:
-                #     logits = logits[:, -1, :]  # shape [B, V]
-                # If enc_action_mask is 3D, take the last time step
-                # if tf.rank(enc_action_mask) == 3:
                 enc_action_mask = enc_action_mask[:, -1, :]  # shape [B, V]
                 # Log prob - Keep calculation method completely consistent with sampling
                 # 1. Manual numerical stability processing (consistent with sampling)
@@ -1686,34 +1593,6 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
                 # This ensures perfect consistency between ratio and KL computation
                 masked_new_log_probs = new_log_probs
                 
-                # Ready for KL divergence calculation
-                
-                # Debug: Print old and new logits for analysis using tf.print
-                # if tf.reduce_any(tf.math.is_nan(masked_new_log_probs)) or tf.reduce_any(tf.math.is_inf(masked_new_log_probs)):
-                #     tf.print("WARNING: NaN or Inf detected in masked_new_log_probs")
-                #     tf.print("masked_logits sample:", masked_logits[0, :5])
-                #     tf.print("masked_probs sample:", masked_probs[0, :5])
-                
-                # Print statistics for debugging using tf.print
-                # old_log_probs_mean = tf.reduce_mean(batch_old_log_probs)
-                # new_log_probs_mean = tf.reduce_mean(masked_new_log_probs)
-                # old_log_probs_std = tf.math.reduce_std(batch_old_log_probs)
-                # new_log_probs_std = tf.math.reduce_std(masked_new_log_probs)
-                # log_prob_diff_mean = old_log_probs_mean - new_log_probs_mean
-                
-                # tf.print("DEBUG - Old log_probs: mean=", old_log_probs_mean, ", std=", old_log_probs_std)
-                # tf.print("DEBUG - New log_probs: mean=", new_log_probs_mean, ", std=", new_log_probs_std)
-                # tf.print("DEBUG - Log prob diff: mean=", log_prob_diff_mean)
-                
-                # # Print sample logits for comparison using tf.print
-                # tf.print("DEBUG - Sample old_log_probs:", batch_old_log_probs[:5])
-                # tf.print("DEBUG - Sample new_log_probs:", masked_new_log_probs[:5])
-                
-                
-                
-                # Calculate KL divergence using Schulman (2020) approximation
-                # KL[θ_FT || θ_BASE] = Σ(r - log(r) - 1) where r = p_old/p_new
-                # This form is more numerically stable and commonly used in RLHF
                 
                 # Convert log probabilities to probabilities
                 old_probs = tf.exp(batch_old_log_probs)
@@ -1776,11 +1655,7 @@ def _update_policy(self, inputs_batch, actions, old_log_probs, advantages, optim
             # Monitor KL divergence and ratio (print every 20 batches)
             if iters % 20 == 1:
                 print(f"Batch {iters}: KL={total_kl/iters:.4f}, Loss={total_loss/iters:.4f}, Ratio mean={float(ratio_mean_val):.4f}, max={float(ratio_max_val):.4f}, min={float(ratio_min_val):.4f}")
-                # Print log probability statistics
-                # print(f"  Old log probs: mean={tf.reduce_mean(batch_old_log_probs):.4f}, std={tf.math.reduce_std(batch_old_log_probs):.4f}")
-                # print(f"  New log probs: mean={tf.reduce_mean(new_log_probs_val):.4f}, std={tf.math.reduce_std(new_log_probs_val):.4f}")
-                # print(f"  Log prob diff: mean={tf.reduce_mean(log_prob_diff_val):.4f}, std={tf.math.reduce_std(log_prob_diff_val):.4f}")
-                # Log detailed policy update statistics
+
                 def write_policy_stats():
                     log_file.write(f"Epoch {epoch+1}/{epochs} | Policy Batch {iters}: KL={total_kl/iters:.4f}, Loss={total_loss/iters:.4f}, Ratio mean={float(ratio_mean_val):.4f}, max={float(ratio_max_val):.4f}, min={float(ratio_min_val):.4f}\n")
                     # Convert tensors to numpy values to avoid graph retention
@@ -2030,11 +1905,6 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
         # print(f"Circuit incomplete (None nodes detected), reward = -1.0")
         return -1.0
 
-    # Check if error rate exceeds threshold
-    # if error_rate > error_rate_threshold:
-    #     # If error exceeds threshold, give severe penalty
-    #     final_reward = -0.1
-        # print(f"Error rate {error_rate:.4f} exceeds threshold {error_rate_threshold:.4f}, reward = -1.0")
     else:
         # Calculate improvements
         # Use tf.stop_gradient for baseline values to prevent gradient flow
@@ -2068,14 +1938,7 @@ def _calculate_comprehensive_reward(self, optimized_roots, original_roots, basel
         # Debug info: show reward breakdown
         if final_reward > 0.3:  # Print medium and above reward cases
             raw_reward = w_area * area_reward + w_delay * delay_reward + w_error * error_reward
-            # print(f"Reward breakdown: Area {original_area}->{optimized_area} (baseline:{baseline_area}, +{area_improvement}), "
-            #       f"Delay {original_delay}->{optimized_delay} (+{delay_improvement:.1f}), "
-            #       f"Error {error_rate:.4f} (threshold:{error_rate_threshold:.4f})")
-            # print(f"  Raw components: area={area_reward:.3f}*{w_area}={w_area*area_reward:.3f}, "
-            #       f"delay={delay_reward:.3f}*{w_delay}={w_delay*delay_reward:.3f}, "
-            #       f"error={error_reward:.1f}*{w_error}={w_error*error_reward:.3f}")
-            # print(f"  Raw total: {raw_reward:.3f} -> Clipped: {np.clip(raw_reward, -2.0, 2.0):.3f} -> Final: {final_reward:.4f}")
-            # Log detailed reward breakdown for high-reward cases
+
             if log_file is not None:
                 def write_reward_breakdown():
                     log_file.write(f"High reward case: Area {original_area}->{optimized_area} (baseline:{baseline_area}, +{area_improvement}), "

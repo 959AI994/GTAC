@@ -16,20 +16,16 @@ class CircuitTransformerRefactored(CircuitTransformer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
-    # 训练相关方法
     train = train
     train_ppo = train_ppo
     
-    # 推理相关方法
     optimize = optimize
     optimize_batch = optimize_batch
     _batch_estimate_policy = _batch_estimate_policy
     _batch_estimate_v_value_via_simulation_kvcache = _batch_estimate_v_value_via_simulation_kvcache
     
-    # MCTS优化相关方法
     _batch_MCTS_policy_with_leaf_parallelization = _batch_MCTS_policy_with_leaf_parallelization
     
-    # PPO训练相关方法
     _circuit_iterator = _circuit_iterator
     _optimize_with_ppo_policy = _optimize_with_ppo_policy
     _create_circuit_env = _create_circuit_env

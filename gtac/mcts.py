@@ -21,13 +21,7 @@ import tensorflow as tf
 import tf_keras as keras
 import keras.backend as K
 import gc
-# from tensorflow import keras
-
-# import keras
-# from tensorflow import keras
-# import tensorflow.keras
 import sys
-# replace your path
 sys.path.append('./')
 
 from tensorflow_models import nlp

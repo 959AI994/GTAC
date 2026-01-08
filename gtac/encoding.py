@@ -3,21 +3,6 @@ from __future__ import annotations
 import numpy as np
 from gtac.utils import Node, NodeWithInv
 
-'''
-for 8-input, 2-output circuits
-Token(int):
-0: PAD
-1: EOS
-2,4,6,...,16: PI1, PI2, PI3, ... , PI8
-3,5,7,...,17: ~PI1, ~PI2, ~PI3, ..., ~PI8
-18: AND
-19: NAND
-
-Newly add:
-20: constant 0
-21: constant 1
-'''
-
 def node_to_int(root: NodeWithInv, num_inputs: int):
     """convert node to integer token"""
     # zero for [PAD] that will be masked

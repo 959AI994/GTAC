@@ -9,15 +9,6 @@ EOS_ID = 1
 
 
 class Seq2SeqTransformer(keras.Model):
-  """Transformer model with Keras.
-
-  Implemented as described in: https://arxiv.org/pdf/1706.03762.pdf
-
-  The Transformer model consists of an encoder and decoder. The input is an int
-  sequence (or a batch of sequences). The encoder produces a continuous
-  representation, and the decoder uses the encoder output to generate
-  probabilities for the output sequence.
-  """
 
   def __init__(self,
                enc_vocab_size=33708,
@@ -384,7 +375,6 @@ class Seq2SeqTransformer(keras.Model):
     # value_output = self.value_head(outputs)
     logits = self._embedding_linear(self.dec_embedding_lookup.embeddings, outputs)
     # Model outputs should be float32 to avoid numeric issues.
-    # https://www.tensorflow.org/guide/mixed_precision#building_the_model
     if return_last_token:
         logits = logits[:, -1, :]
     logits = tf.cast(logits, tf.float32)
@@ -406,10 +396,6 @@ class Seq2SeqTransformer(keras.Model):
             return logits, {'encoder_outputs': encoder_outputs, 'outputs': outputs, 'kv_cache': kv_cache}
     elif return_value:
         return logits, {'value': value, 'cache': {'encoder_outputs': encoder_outputs, 'outputs': outputs, 'kv_cache': kv_cache}}
-    # if return_kv_cache:
-    #     # return [logits, value_output, cache]
-    #     return logits, cache
-    # return [logits, value_output]
     else:
         # Training mode: return (logits, cache) for compatibility with Keras
         return logits
@@ -811,30 +797,3 @@ class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
     arg1 = tf.math.rsqrt(step)
     arg2 = step * (self.warmup_steps ** -1.5)
     lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-
-#     return lr
-# from tensorflow import keras
-
-# class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
-#     def __init__(self, d_model, warmup_steps=4000):
-#         super().__init__()
-#         self.d_model = tf.cast(d_model, tf.float32)
-#         self.warmup_steps = warmup_steps
-
-#     def __call__(self, step=None):  # 关键修改：允许 step 为 None
-#         # 处理 step 未传入的情况（初始化阶段）
-#         if step is None:
-#             step = tf.constant(0.0)  # 初始化为 0
-#         step = tf.cast(step, tf.float32)
-#         # 防止 step=0 导致除以零
-#         safe_step = tf.maximum(step, 1.0)
-#         arg1 = tf.math.rsqrt(safe_step)
-#         arg2 = step * (self.warmup_steps ** -1.5)
-#         return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-
-#     # 必须实现 get_config 方法以支持序列化
-#     def get_config(self):
-#         return {
-#             "d_model": self.d_model.numpy(),
-#             "warmup_steps": self.warmup_steps
-#         }
