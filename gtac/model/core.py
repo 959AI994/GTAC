@@ -24,7 +24,11 @@ import gc
 # replace your path
 sys.path.append('./')
 
-from tensorflow_models import nlp
+from official.nlp.modeling import models as nlp_models
+# Create a namespace object to match the expected nlp.models structure
+class NlpNamespace:
+    models = nlp_models
+nlp = NlpNamespace()
 from gtac.tensorflow_transformer import Seq2SeqTransformer, CustomSchedule, masked_loss, masked_accuracy
 from gtac.utils import *
 from gtac.encoding import node_to_int, int_to_node, encode_aig, stack_to_encoding, deref_node

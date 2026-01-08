@@ -261,8 +261,8 @@ gtac/tensorboard/
 **/events.out.tfevents*
 **/*.xplane.pb
 # official/
-orbit/
-tensorflow_models/
+# orbit/
+# tensorflow_models/
 models/
 *.mk
 ckpt*
