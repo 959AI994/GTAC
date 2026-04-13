@@ -1,0 +1,8 @@
+numpy>=1.26,<2.1
+scipy>=1.11,<1.16
+bitarray>=3.4
+graphviz>=0.20
+npn==1.4
+tensorflow==2.18.1
+tf_keras==2.18.0
+tf-models-official==2.18.0
