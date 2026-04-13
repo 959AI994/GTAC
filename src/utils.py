@@ -551,9 +551,9 @@ def measureDelayArea(roots, verbose=False):
     result = result.stdout + "\n" + result.stderr
     # print(f"ABC output for (first 300 chars):\n{result[:300]}...")
     if verbose:
-        print("ABC命令:", cmd)
-        print("ABC输出:", result.stdout)
-        print("ABC错误:", result.stderr)
+        print("ABC command:", cmd)
+        print("ABC stdout:", result.stdout)
+        print("ABC stderr:", result.stderr)
 
     stats = {'power': 'N/A', 'delay': 'N/A', 'area': 'N/A', 'size': 'N/A'}
     
@@ -577,52 +577,50 @@ def measureDelayArea(roots, verbose=False):
         pass
     
     if delay is None or area is None:
-        raise RuntimeError("无法从ABC输出中解析")
+        raise RuntimeError("Failed to parse delay/area from ABC output")
     
     return delay, area
 
 def compute_critical_path(roots):
-    '''计算关键路径延迟（逻辑深度）'''
+    """Compute critical-path delay (logic depth)."""
     if not roots:
         return 0
     
     node_depth = {}
     
     def traverse(node):
-        # 处理节点为None的情况
+        # Handle None nodes
         if node is None:
-            return -1  # 返回-1表示无效节点
-        
-        # 检查节点是否已计算
+            return -1  # Invalid node marker
+
+        # Return cached depth if already computed
         if id(node) in node_depth:
             return node_depth[id(node)]
-        
-        # 叶子节点（输入变量）
+
+        # Leaf nodes (inputs)
         if node.is_leaf():
             depth = 0
-        # 非叶子节点（AND门）
+        # Internal nodes (AND gates)
         else:
             left_depth = traverse(node.left) if node.left else -1
             right_depth = traverse(node.right) if node.right else -1
-            
-            # 处理子节点缺失的情况
+
+            # Missing children
             if left_depth < 0 and right_depth < 0:
-                depth = 0  # 没有有效子节点
+                depth = 0  # No valid children
             elif left_depth < 0:
-                depth = right_depth + 1  # 只有右子节点
+                depth = right_depth + 1  # Only right child
             elif right_depth < 0:
-                depth = left_depth + 1   # 只有左子节点
+                depth = left_depth + 1   # Only left child
             else:
                 depth = max(left_depth, right_depth) + 1
-        
-        # 缓存结果
+
         node_depth[id(node)] = depth
         return depth
-    
-    # 计算所有根节点的最大深度
+
     max_depth = 0
     for root in roots:
-        if root:  # 确保根节点有效
+        if root:  # Skip invalid roots
             depth = traverse(root)
             if depth > max_depth:
                 max_depth = depth

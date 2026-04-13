@@ -96,7 +96,7 @@ def int_to_node(token: int, num_inputs: int) -> NodeWithInv | bool:
 
 
 def encode_aig(roots: list[NodeWithInv], num_inputs: int) -> (list[int], list[int]):
-    """编码AIG为序列和位置编码"""
+    """Encode AIG as token sequence and positional encodings."""
     def encode_aig_rec(root: NodeWithInv, seq_enc: list[int], cur_pos_enc: int, pos_enc: list[int]):
         seq_enc.append(node_to_int(root, num_inputs))
         pos_enc.append(cur_pos_enc)
@@ -164,23 +164,22 @@ def stack_to_encoding(tree_stack: list, root_id: int, max_tree_depth: int, num_o
 
 def ref_position_encoding_from_ref_token(prev_enc: np.ndarray, max_tree_depth: int, max_outputs: int = 256) -> np.ndarray:
     """
-    修正后的版本：从 REF_TOKEN 的编码计算 ref_index 的位置编码。
+    Compute positional encoding for ref_index from the REF_TOKEN encoding (aligned with training).
     """
     from scalable_circuit_transformer_refdfs.encoding import get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS
     
-    # 1. 获取统一的位宽 (必须与训练及 stack_to_encoding 一致)
+    # 1. Bit width (must match training / stack_to_encoding)
     n_vars = get_pos_encoding_n_vars(max_tree_depth, max_outputs)
-    
-    # 2. 恢复整数路径：
-    # prev_enc 是 MSB-first (reversed LSB)，所以取前 n_vars 位再翻转回 LSB-first
+
+    # 2. Recover integer path: prev_enc is MSB-first (reversed LSB)
     prev_bits = prev_enc[:n_vars] 
     prev_bits_lsb = list(reversed(prev_bits)) 
     cur_pos_int = sum(int(b) * (2 ** i) for i, b in enumerate(prev_bits_lsb))
     
-    # 3. 执行路径位移 (左子树步进)
+    # 3. Path step (left-child)
     next_pos_int = (cur_pos_int << 2) + 1
-    
-    # 4. 转换回二进制比特流
+
+    # 4. Back to binary bitstream
     if n_vars <= _NPN_INT_TO_TT_MAX_VARS:
         binary_list = npn.int_to_tt(next_pos_int, n_vars)
     else:
@@ -188,7 +187,7 @@ def ref_position_encoding_from_ref_token(prev_enc: np.ndarray, max_tree_depth: i
     
     final_pos = list(reversed(binary_list))
     
-    # 5. 格式化输出数组
+    # 5. Pack into fixed-length vector
     target_len = max_tree_depth * 2
     pos_array = np.zeros(target_len, dtype=np.float32)
     num_to_copy = min(len(final_pos), target_len)
@@ -197,7 +196,7 @@ def ref_position_encoding_from_ref_token(prev_enc: np.ndarray, max_tree_depth: i
     return pos_array
 
 def deref_node(root: Node, ref_dict: dict, context_nodes=None, verbose=0):
-    """解引用节点"""
+    """Dereference / count shared nodes under root."""
     if context_nodes is not None and root in context_nodes:
         return 0
     if root.is_leaf():

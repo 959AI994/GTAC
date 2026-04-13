@@ -313,8 +313,8 @@ class LogicNetworkEnv:
         return reward
 
     def reset(self, **kwargs):
-        """重置环境到初始状态"""
-        # 初始化状态变量
+        """Reset environment to initial state."""
+        # Initialize state
         self.roots = []
         self.tokens = []
         self.positional_encodings = []
@@ -328,7 +328,7 @@ class LogicNetworkEnv:
         self.prev_error = 0
         # self.cur_root_id = 0
         
-        # 重置 REF_TOKEN 相关状态
+        # Reset REF_TOKEN-related state
         if self.use_memory_dfs:
             self.decoded_nodes = []
             self.decoded_nodes_tt = []
@@ -339,7 +339,7 @@ class LogicNetworkEnv:
             self._current_actual_node_pos = -1
             self._expecting_ref_position = False
         
-        # 初始化真值表缓存
+        # Initialize truth-table cache
         self.tt_cache_bitarray = {Node(i // 2, None, None): v
                                  for i, v in enumerate(self.input_tt_bitarray) if i % 2 == 0}
         self.tt_hash_bitarray = {v.tobytes(): node for node, v in self.tt_cache_bitarray.items()}
@@ -347,24 +347,24 @@ class LogicNetworkEnv:
         self.context_nodes = set()
         self.context_records = dict()
         
-        # 初始化care set（如果使用）
+        # Initialize care set when enabled
         if self.use_controllability_dont_cares:
             self.initialize_care_set_tt()
         
-        # 生成初始动作掩码
+        # Build initial action mask
         self.action_masks.append(self.gen_action_mask())
         
         return self._get_obs()
 
     def _get_obs(self):
-        """获取当前观察值"""
-        # 填充序列到最大长度
+        """Return current observation dict."""
+        # Pad sequence to max length
         tokens = np.array(self.tokens + [self.PAD] * (self.max_length - len(self.tokens)), dtype=np.int32)
         pos_enc = np.zeros((self.max_length, self.max_tree_depth * 2), dtype=np.float32)
         if self.positional_encodings:
             pos_enc[:len(self.positional_encodings)] = np.array(self.positional_encodings)
         
-        # 当前动作掩码
+        # Latest action mask
         action_mask = self.action_masks[-1] if self.action_masks else np.zeros(self.vocab_size, dtype=bool)
         return {
             'tokens': tokens,
@@ -660,8 +660,7 @@ class LogicNetworkEnv:
                 return reward, done
 
             # *** START FIX ***
-            # 映射 *当前* actual_node_pos (对应于此 REF_TOKEN)
-            # 到它所 *引用* 的节点的 decoded_idx。
+            # Map current actual_node_pos (for this REF_TOKEN) to the referenced node's decoded_idx.
             if hasattr(self, '_current_actual_node_pos') and self._current_actual_node_pos >= 0:
                 if self._current_actual_node_pos not in self.seq_position_to_decoded_idx:
                     self.seq_position_to_decoded_idx[self._current_actual_node_pos] = decoded_idx
@@ -1293,16 +1292,16 @@ class LogicNetworkEnv:
         return reward, done
 
     def ppo_step(self, action):
-        """PPO训练用的step方法。生成失败或异常时返回 unfinished_penalty 并 done=True，避免卡死或崩溃。"""
-        # 如果环境已结束，继续返回结束状态
+        """PPO step wrapper: on failure or exception return unfinished_penalty with done=True."""
+        # If already finished, keep returning terminal state
         if self.is_finished:
             return self._get_obs(), 0, True, {}
 
         try:
-            # 执行动作（使用原始step方法）
+            # Delegate to underlying step()
             reward, done = self.step(action)
 
-            # 检查是否达到最大长度（未完成则给惩罚并结束）
+            # Truncate at max length with penalty if still unfinished
             if self.t >= self.max_length - 1 and not self.is_finished:
                 done = True
                 reward = self.unfinished_penalty
@@ -1316,52 +1315,46 @@ class LogicNetworkEnv:
 
     def detect_token_cycle(self, window_size=6):
         """
-        检测最近的 token 序列中是否有循环模式，特别是 AND/NAND 的简单循环
-        
-        检测模式如：[input, gate, input, gate, input, gate] 或 [input, gate, input, gate]
-        其中 gate 是 AND 或 NAND
-        
+        Detect simple repeating patterns in recent tokens (e.g. alternating input and AND/NAND).
+
+        Looks for patterns like [input, gate, input, gate, ...] where gate is AND or NAND.
+
         Args:
-            window_size: 检测窗口大小（默认6，检测最近6个token）
-        
+            window_size: How many recent tokens to inspect (default 6).
+
         Returns:
-            is_cycling: bool, 是否检测到循环
-            cycle_tokens: set, 循环模式中的 token 集合（需要禁止的 token）
+            is_cycling: Whether a cycle was detected.
+            cycle_tokens: Tokens involved in the cycle (candidates to mask).
         """
         if len(self.tokens) < 4:
             return False, set()
         
         recent = self.tokens[-window_size:]
         
-        # 获取 AND 和 NAND 的 token ID
+        # AND / NAND token ids
         # vocab_size includes REF_TOKEN if using memory DFS, so use vocab_size - 5, -4
         and_token_id = self.vocab_size - 5
         nand_token_id = self.vocab_size - 4
         gate_tokens = {and_token_id, nand_token_id}
         
-        # 输入 token 的范围：2 到 2 + num_inputs * 2
+        # Input token id range: [2, 2 + num_inputs * 2)
         input_token_start = 2
         input_token_end = 2 + self.num_inputs * 2
         
-        # 检测2-token循环：[A, B, A, B] 或 [A, B, A, B, A, B]
-        # 其中 A 是输入 token，B 是 AND/NAND token
+        # Two-token cycle: [A, B, A, B, ...] with input A and gate B
         if len(recent) >= 4:
-            # 检查最后4个token是否是 [input, gate, input, gate] 模式
+            # Last four tokens: [input, gate, input, gate]
             if (recent[-4] >= input_token_start and recent[-4] < input_token_end and
                 recent[-3] in gate_tokens and
-                recent[-2] == recent[-4] and  # 相同的输入
-                recent[-1] == recent[-3]):    # 相同的门
-            
-                # 检查是否至少重复2次（共4个token）
-                cycle_tokens = {recent[-4], recent[-3]}  # 输入和门
-                
-                # 如果窗口更大，检查是否继续循环
+                recent[-2] == recent[-4] and  # same input
+                recent[-1] == recent[-3]):    # same gate
+
+                cycle_tokens = {recent[-4], recent[-3]}  # input + gate
+
                 if len(recent) >= 6:
                     if recent[-6] == recent[-4] == recent[-2]:
-                        # 确认是循环模式
                         return True, cycle_tokens
-                
-                # 至少检测到一次 [input, gate, input, gate] 模式
+
                 return True, cycle_tokens
         
         return False, set()

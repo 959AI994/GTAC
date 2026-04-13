@@ -804,7 +804,7 @@ class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
     self.warmup_steps = warmup_steps
 
   def __call__(self, step):
-    # 处理 step 为 None 的情况（初始化阶段）
+    # step may be None during graph build / init
     if step is None:
        step = 1e-3
     step = tf.cast(step, dtype=tf.float32)
@@ -821,18 +821,17 @@ class CustomSchedule(keras.optimizers.schedules.LearningRateSchedule):
 #         self.d_model = tf.cast(d_model, tf.float32)
 #         self.warmup_steps = warmup_steps
 
-#     def __call__(self, step=None):  # 关键修改：允许 step 为 None
-#         # 处理 step 未传入的情况（初始化阶段）
+#     def __call__(self, step=None):  # allow step=None
 #         if step is None:
-#             step = tf.constant(0.0)  # 初始化为 0
+#             step = tf.constant(0.0)
 #         step = tf.cast(step, tf.float32)
-#         # 防止 step=0 导致除以零
+#         # avoid div-by-zero at step=0
 #         safe_step = tf.maximum(step, 1.0)
 #         arg1 = tf.math.rsqrt(safe_step)
 #         arg2 = step * (self.warmup_steps ** -1.5)
 #         return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
-#     # 必须实现 get_config 方法以支持序列化
+#     # get_config for Keras serialization
 #     def get_config(self):
 #         return {
 #             "d_model": self.d_model.numpy(),

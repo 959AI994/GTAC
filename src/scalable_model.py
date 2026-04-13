@@ -373,7 +373,7 @@ class ScalableCircuitTransformer:
             """
             Generate action masks for a given sequence with corrected timing logic.
             """
-            # 1. 初始化环境
+            # 1. Create environment
             try:
                 env = LogicNetworkEnv(
                     tts, num_inputs, init_care_set_tt=care_set_tts, ffw=ffw,
@@ -394,27 +394,26 @@ class ScalableCircuitTransformer:
             action_masks = []
             valid_mask = self.encoder.get_valid_token_mask(num_inputs)
             
-            # 2. 定义特殊 Token ID (基于 max_vocab_size 的倒数位置)
-            # 确保与 LogicNetworkEnv.gen_action_mask 中的定义一致
+            # 2. Special token ids (last slots of max_vocab_size); keep in sync with LogicNetworkEnv.gen_action_mask
             ref_token_id = self.max_vocab_size - 1      # 518
             constant_1_id = self.max_vocab_size - 2     # 517
             constant_0_id = self.max_vocab_size - 3     # 516
             nand_token_id = self.max_vocab_size - 4     # 515
             and_token_id = self.max_vocab_size - 5      # 514
             
-            # 3. 初始化计数器
+            # 3. Counters
             actual_node_counter = 0 
             if self.use_memory_dfs:
                 env.current_seq_position = 0 
 
-            # 辅助函数：处理并填充 Mask
+            # Helper: pad env mask to model vocab and optionally intersect valid_mask
             def _process_and_append_mask(env_mask, apply_valid_mask=True):
                 padded_mask = np.zeros(self.max_vocab_size, dtype=bool)
                 curr_len = len(env_mask)
                 limit = min(curr_len, self.max_vocab_size)
                 padded_mask[:limit] = env_mask[:limit]
                 
-                # --- [修改点]：仅在需要时应用 valid_mask ---
+                # Apply valid_mask only when requested
                 if apply_valid_mask:
                     padded_mask = np.logical_and(padded_mask, valid_mask)
                 
@@ -431,31 +430,29 @@ class ScalableCircuitTransformer:
                     if self.use_memory_dfs and token == ref_token_id:
                         if idx + 1 >= len(seq_enc): return None 
 
-                        # 1. 设置环境状态
+                        # 1. Env state for REF pair
                         env._current_actual_node_pos = actual_node_counter
                         # REF pair is atomic in seq-position semantics: REF + position consume 2 slots.
                         actual_node_counter += 2
                         
-                        # 2. 执行 REF_TOKEN 动作
+                        # 2. Step REF_TOKEN
                         env.step(token) 
 
-                        # 3. 收集 ref_position 的 Mask
-                        # --- [关键修复]：这里是位置索引，绝对不要应用 valid_mask！ ---
+                        # 3. Mask for ref_position (position index; do not apply valid_mask)
                         _process_and_append_mask(env.action_masks[-1], apply_valid_mask=False)
 
-                        # 4. 执行 ref_position 动作
+                        # 4. Step ref_position token
                         ref_pos_token = seq_enc[idx + 1]
                         if env._expecting_ref_position is False:
                             # Contract check: after stepping REF_TOKEN, env must expect a position token.
                             return None
-                        env._current_actual_node_pos = -1 # 位置索引本身不是节点，重置
+                        env._current_actual_node_pos = -1  # position index is not a node
                         env.current_seq_position = actual_node_counter
                         env.step(ref_pos_token)
 
-                        # 5. 同步环境内部计数器 (至关重要)
-                        
-                        
-                        idx += 2 # 跳过 [REF, POS]
+                        # 5. Keep env counters in sync
+
+                        idx += 2  # skip [REF, POS]
                         continue
 
 
@@ -483,11 +480,11 @@ class ScalableCircuitTransformer:
                 traceback.print_exc()
                 return None
 
-            # 4. 填充 Action Masks 到 max_seq_length
+            # 4. Pad action masks to max_seq_length
             action_masks = np.stack(action_masks)
             if len(action_masks) < self.max_seq_length:
                 padding = np.zeros((self.max_seq_length - len(action_masks), self.max_vocab_size), dtype=bool)
-                padding[:, 0] = True # 默认允许 PAD
+                padding[:, 0] = True  # allow PAD in padded tail
                 action_masks = np.concatenate([action_masks, padding], axis=0)
             return action_masks
 
@@ -679,26 +676,18 @@ class ScalableCircuitTransformer:
         # print(f"opt_tts: {opt_tts}")
         # print(f"len(opt_tts): {len(opt_tts)}")
 
-        # 1. 获取长度 (这里是64)
         length = len(tts[0])
 
-        # 2. 初始化一个全为0的 bitarray，用于记录差异
-        # diff_map[i] 为 1 表示第 i 列（即第 i 个 tt）不相同
+        # diff_map[i]==1 iff column i differs between tts and opt_tts
         diff_map = bitarray.bitarray(length)
         diff_map.setall(0)
 
-        # 3. 遍历每一行，找出差异
-        # 如果 tts 和 opt_tts 在某一行不同 (XOR为1)，我们将这个差异累积到 diff_map 中 (OR运算)
+        # OR-accumulate per-output XOR across rows
         for t, o in zip(tts, opt_tts):
             diff_map |= (t ^ o)
 
-        # 4. 计算不相同的 tt 数量
         num_diff_tt = diff_map.count(1)
-
-        # 5. 计算比率
         error_rate = num_diff_tt / length
-
-        # --- 输出结果 ---
         # print(f"Total columns (tt): {length}")
         # print(f"Different columns: {num_diff_tt}")
         # print(f"Error Rate: {error_rate:.4f} ({error_rate * 100:.2f}%)")

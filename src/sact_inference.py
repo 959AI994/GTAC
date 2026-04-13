@@ -879,7 +879,7 @@ def optimize_batch(self,
                 print(" (orig=%d, orig+resyn2=%d, optimize=%d, optimize+resyn2=%d)" %
                       (orig_num_ands, orig_resyn_num_ands, num_ands, opt_resyn_num_ands))
                 
-                # 计算优化后电路的真值表 (使用 Monte Carlo 或 精确计算，取决于输入规模)
+                # Truth tables for optimized circuit (Monte Carlo vs exact by input size)
                 current_num_inputs = num_inputs_list[i]
                 current_input_tt = self.get_input_tt(current_num_inputs, seed=self.tt_seed) if input_tts is None else input_tts[i]
                 
@@ -890,7 +890,7 @@ def optimize_batch(self,
                     seed=self.tt_seed
                 )
                 
-                # 原电路的真值表已经在 tts_list[i] 中
+                # Original circuit truth tables are already in tts_list[i]
                 orig_tts = tts_list[i]
                 
                 if len(orig_tts) > 0:
@@ -898,7 +898,7 @@ def optimize_batch(self,
                     diff_map = bitarray.bitarray(length)
                     diff_map.setall(0)
                     
-                    # 比较每一路输出
+                    # Compare each output bit-column
                     for t, o in zip(orig_tts, opt_tts):
                         diff_map |= (t ^ o)
                     

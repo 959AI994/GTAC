@@ -87,7 +87,7 @@ def main():
         embedding_width=512,
         num_layers=12,
         num_attention_heads=8,
-        max_seq_length=400,  # 支持大部分大电路
+        max_seq_length=400,  # Large enough for most big circuits
         ckpt_path=None,
         verbose=0,
         error_rate_threshold=0.1,
