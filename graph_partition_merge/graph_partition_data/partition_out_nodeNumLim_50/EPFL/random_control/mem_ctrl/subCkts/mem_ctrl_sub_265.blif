@@ -1,0 +1,26 @@
+# Benchmark "(null)" written by ABC on Mon Nov  3 15:58:35 2025
+.model (null)
+.inputs n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 n17 n18 n19 \
+ n20 n21 n22 n23 n24 n25 n26 n27
+.outputs n28 n29 n30 n31
+.names n16 n17 new_n32
+01 1
+.names n7 new_n32 n28
+10 1
+.names n19 n20 new_n34
+01 1
+.names n18 new_n34 new_n35
+01 1
+.names n23 new_n35 new_n36
+10 1
+.names n24 new_n36 new_n37
+10 1
+.names n25 new_n37 n29
+10 1
+.names n26 n27 new_n39
+01 1
+.names n13 new_n39 n30
+10 1
+.names n7 n30 n31
+00 1
+.end

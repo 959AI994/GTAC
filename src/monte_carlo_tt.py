@@ -12,8 +12,8 @@ import numpy as np
 import bitarray
 import bitarray.util
 from typing import Union, List, Optional, Dict
-from scalable_circuit_transformer_refdfs.utils import *
-from scalable_circuit_transformer_refdfs.utils import NodeWithInv, Node
+from src.utils import *
+from src.utils import NodeWithInv, Node
 
 # Note: No maximum input limit needed for Monte Carlo approximation
 # Monte Carlo uses sampling (fixed memory O(n_samples)) instead of full truth tables
@@ -389,7 +389,7 @@ def compute_tt_adaptive(root: Union[NodeWithInv, Node],
     """
     if num_inputs <= threshold:
         # Use exact computation for small circuits
-        from scalable_circuit_transformer_refdfs.utils import compute_tt
+        from src.utils import compute_tt
         return compute_tt(root, num_inputs=num_inputs, input_tt=input_tt, cache=cache)
     else:
         # Use approximate computation for large circuits
@@ -428,7 +428,7 @@ def compute_tts_adaptive(roots: Union[NodeWithInv, Node, List[Union[NodeWithInv,
     
     if num_inputs <= threshold:
         # Use exact computation for small circuits
-        from scalable_circuit_transformer_refdfs.utils import compute_tts
+        from src.utils import compute_tts
         return compute_tts(roots, num_inputs=num_inputs, input_tt=input_tt)
     else:
         # Use approximate computation for large circuits

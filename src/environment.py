@@ -6,16 +6,16 @@ import numpy as np
 import npn
 import bitarray
 import bitarray.util
-from scalable_circuit_transformer_refdfs.utils import (Node, NodeWithInv, compute_input_tt, 
+from src.utils import (Node, NodeWithInv, compute_input_tt, 
 compute_tt, check_conflict, get_inputs_rec, detect_circle, compute_critical_path, base_2_log,
 check_integrity
 )
-from scalable_circuit_transformer_refdfs.encoding import (
+from src.encoding import (
     stack_to_encoding, int_to_node, deref_node,
     get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS,
 )
-from scalable_circuit_transformer_refdfs.dynamic_encoding import DynamicEncoder
-from scalable_circuit_transformer_refdfs.monte_carlo_tt import (
+from src.dynamic_encoding import DynamicEncoder
+from src.monte_carlo_tt import (
     compute_tt_adaptive, compute_tts_adaptive,
     compute_input_tt_approximate, generate_input_samples,
     MonteCarloTT

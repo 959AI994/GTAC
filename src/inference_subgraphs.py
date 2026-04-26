@@ -14,9 +14,9 @@ import json
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-from scalable_circuit_transformer_refdfs.scalable_model import ScalableCircuitTransformer
-from scalable_circuit_transformer_refdfs.dynamic_encoding import DynamicEncoder
-from scalable_circuit_transformer_refdfs.utils import read_aiger, write_aiger, count_num_ands, compute_tts, compute_input_tt, plot_network
+from src.scalable_model import ScalableCircuitTransformer
+from src.dynamic_encoding import DynamicEncoder
+from src.utils import read_aiger, write_aiger, count_num_ands, compute_tts, compute_input_tt, plot_network
 
 
 def parse_aig_header(aig_file: str) -> dict:

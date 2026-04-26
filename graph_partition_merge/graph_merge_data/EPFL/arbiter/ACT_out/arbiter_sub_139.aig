@@ -1,0 +1,27 @@
+aig 52 42 0 7 10
+86
+90
+92
+94
+96
+100
+104
+KM	TSOPDi0 pi00
+i1 pi01
+i2 pi02
+i3 pi03
+i4 pi04
+i5 pi05
+i6 pi06
+i7 pi07
+i8 pi08
+i37 pi37
+i38 pi38
+i41 pi41
+o0 po0
+o1 po1
+o2 po2
+o3 po3
+o4 po4
+o5 po5
+o6 po6

@@ -1,0 +1,107 @@
+# Benchmark "(null)" written by ABC on Mon Nov  3 15:18:37 2025
+.model (null)
+.inputs n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 n17 n18 n19 \
+ n20 n21 n22 n23 n24 n25 n26 n27 n28 n29 n30 n31 n32 n33
+.outputs n34 n35 n36 n37 n38 n39 n40 n41 n42 n43 n44 n45 n46 n47 n48 n49 \
+ n50 n51 n52 n53 n54 n55 n56 n57 n58 n59
+.names n9 n10 n34
+11 1
+.names n9 n11 n35
+11 1
+.names n9 n12 n36
+11 1
+.names n9 n13 new_n63
+11 1
+.names n5 new_n63 new_n64
+11 1
+.names n5 new_n63 new_n65
+00 1
+.names new_n64 new_n65 n37
+00 1
+.names n9 n14 n38
+11 1
+.names n9 n15 new_n68
+11 1
+.names n6 new_n68 new_n69
+11 1
+.names n6 new_n68 new_n70
+00 1
+.names new_n69 new_n70 n39
+00 1
+.names n9 n16 n40
+11 1
+.names n9 n17 n41
+11 1
+.names n9 n18 n42
+11 1
+.names n2 n19 n43
+10 1
+.names n2 n19 n44
+01 1
+.names n9 n20 n45
+11 1
+.names n9 n21 n46
+11 1
+.names n9 n22 new_n79
+11 1
+.names n7 new_n79 new_n80
+11 1
+.names n7 new_n79 new_n81
+00 1
+.names new_n80 new_n81 n47
+00 1
+.names n9 n23 n48
+11 1
+.names n9 n24 n49
+11 1
+.names n9 n25 n50
+11 1
+.names n9 n26 n51
+11 1
+.names n9 n27 n52
+11 1
+.names n9 n28 new_n88
+11 1
+.names n8 new_n88 new_n89
+11 1
+.names n8 new_n88 new_n90
+00 1
+.names new_n89 new_n90 n53
+00 1
+.names n9 n29 n54
+11 1
+.names n31 n37 new_n93
+01 1
+.names n31 n37 new_n94
+10 1
+.names new_n93 new_n94 new_n95
+00 1
+.names n4 new_n95 new_n96
+01 1
+.names n30 new_n96 new_n97
+00 1
+.names n4 new_n95 new_n98
+10 1
+.names new_n97 new_n98 n55
+00 1
+.names n32 n39 new_n100
+01 1
+.names n32 n39 new_n101
+10 1
+.names new_n100 new_n101 new_n102
+00 1
+.names n3 new_n102 n56
+01 1
+.names n3 new_n102 n57
+10 1
+.names n33 n53 new_n105
+01 1
+.names n33 n53 new_n106
+10 1
+.names new_n105 new_n106 new_n107
+00 1
+.names n1 new_n107 n58
+01 1
+.names n1 new_n107 n59
+10 1
+.end

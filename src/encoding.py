@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scalable_circuit_transformer_refdfs.utils import Node, NodeWithInv, base_2_log
+from src.utils import Node, NodeWithInv, base_2_log
 import npn
 
 # npn.int_to_tt allocates 2^n_vars elements; overflow when n_vars > ~24
@@ -166,7 +166,7 @@ def ref_position_encoding_from_ref_token(prev_enc: np.ndarray, max_tree_depth: i
     """
     Compute positional encoding for ref_index from the REF_TOKEN encoding (aligned with training).
     """
-    from scalable_circuit_transformer_refdfs.encoding import get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS
+    from src.encoding import get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS
     
     # 1. Bit width (must match training / stack_to_encoding)
     n_vars = get_pos_encoding_n_vars(max_tree_depth, max_outputs)

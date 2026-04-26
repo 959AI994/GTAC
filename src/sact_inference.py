@@ -8,13 +8,13 @@ These methods are bound to ScalableCircuitTransformer instances at initializatio
 import time
 import copy
 import numpy as np
-from scalable_circuit_transformer_refdfs.dynamic_encoding import DynamicEncoder
+from src.dynamic_encoding import DynamicEncoder
 import scipy.special as special
 import bitarray
-from scalable_circuit_transformer_refdfs.utils import *
-from scalable_circuit_transformer_refdfs.environment import LogicNetworkEnv
-from scalable_circuit_transformer_refdfs.mcts import MCTSNode
-from scalable_circuit_transformer_refdfs.encoding import stack_to_encoding
+from src.utils import *
+from src.environment import LogicNetworkEnv
+from src.mcts import MCTSNode
+from src.encoding import stack_to_encoding
 
 
 def _select_tokens_from_masked_logits(
@@ -381,7 +381,7 @@ def optimize_batch(self,
     This is the core optimization method, adapted for ScalableCircuitTransformer
     with support for variable input/output sizes.
     """
-    from scalable_circuit_transformer_refdfs.monte_carlo_tt import compute_tts_adaptive
+    from src.monte_carlo_tt import compute_tts_adaptive
     
     total_time = time.time()
     start_time = time.time()
@@ -416,7 +416,7 @@ def optimize_batch(self,
                 aigs[i] = [aigs[i]]
             
             # Find max input variable index in all roots
-            from scalable_circuit_transformer_refdfs.utils import get_inputs_rec
+            from src.utils import get_inputs_rec
             inputs_dict = get_inputs_rec(aigs[i])
             # Remove constant nodes (var == -1)
             input_vars = [var for var in inputs_dict.keys() if var >= 0]
@@ -534,7 +534,7 @@ def optimize_batch(self,
     
     # Import MCTS method if available
     try:
-        from scalable_circuit_transformer_refdfs.mcts_optimization import _batch_MCTS_policy_with_leaf_parallelization
+        from src.mcts_optimization import _batch_MCTS_policy_with_leaf_parallelization
         if not hasattr(self, '_batch_MCTS_policy_with_leaf_parallelization'):
             self._batch_MCTS_policy_with_leaf_parallelization = _batch_MCTS_policy_with_leaf_parallelization.__get__(self, self.__class__)
     except ImportError:

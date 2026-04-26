@@ -633,7 +633,7 @@ def read_aiger(filename=None, aiger_str: str = None) -> (list[NodeWithInv], dict
         if file_ext == '.aig':  # binary
             if not (os.path.isfile(aigtoaig_path) or shutil.which("aigtoaig")):
                 raise FileNotFoundError(
-                    "Reading .aig requires `aigtoaig`. Copy it into scalable_circuit_transformer_refdfs/bin/, "
+                    "Reading .aig requires `aigtoaig`. Copy it into src/bin/, "
                     "set SACT_AIGTOAIG_PATH, or install `aigtoaig` on PATH (Berkeley ABC). See readme.md."
                 )
             while True:
@@ -808,7 +808,7 @@ def write_aiger(root: NodeWithInv | list[NodeWithInv], filename: str = None, wit
         if file_ext == '.aig':     # binary
             if not (os.path.isfile(aigtoaig_path) or shutil.which("aigtoaig")):
                 raise FileNotFoundError(
-                    "Writing .aig requires `aigtoaig`. Copy it into scalable_circuit_transformer_refdfs/bin/, "
+                    "Writing .aig requires `aigtoaig`. Copy it into src/bin/, "
                     "set SACT_AIGTOAIG_PATH, or install `aigtoaig` on PATH (Berkeley ABC). See readme.md."
                 )
             while True:
@@ -1048,7 +1048,7 @@ def get_subcircuit_nodes(inputs, outputs):
 def aag_to_aig(aag_path, aig_path):
     if not (os.path.isfile(aigtoaig_path) or shutil.which("aigtoaig")):
         raise FileNotFoundError(
-            "aag_to_aig requires `aigtoaig`. Copy it into scalable_circuit_transformer_refdfs/bin/, "
+            "aag_to_aig requires `aigtoaig`. Copy it into src/bin/, "
             "set SACT_AIGTOAIG_PATH, or install `aigtoaig` on PATH. See readme.md."
         )
     os.system("%s %s %s" % (aigtoaig_path, aag_path, aig_path))

@@ -13,7 +13,7 @@ Key Features:
 
 from __future__ import annotations
 import numpy as np
-from scalable_circuit_transformer_refdfs.utils import Node, NodeWithInv
+from src.utils import Node, NodeWithInv
 
 class DynamicEncoder:
     """

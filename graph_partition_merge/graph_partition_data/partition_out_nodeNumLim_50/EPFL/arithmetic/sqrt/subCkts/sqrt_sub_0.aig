@@ -1,0 +1,45 @@
+aig 52 7 0 17 45
+17
+27
+42
+44
+52
+57
+62
+68
+70
+76
+78
+82
+90
+96
+98
+102
+104
+			'7,"-'6H$7/'/3(	#i0 n1
+i1 n2
+i2 n3
+i3 n4
+i4 n5
+i5 n6
+i6 n7
+o0 n8
+o1 n9
+o2 n10
+o3 n11
+o4 n12
+o5 n13
+o6 n14
+o7 n15
+o8 n16
+o9 n17
+o10 n18
+o11 n19
+o12 n20
+o13 n21
+o14 n22
+o15 n23
+o16 n24
+c
+This file was written by ABC on Mon Nov  3 15:22:03 2025
+For information about AIGER format, refer to http://fmv.jku.at/aiger

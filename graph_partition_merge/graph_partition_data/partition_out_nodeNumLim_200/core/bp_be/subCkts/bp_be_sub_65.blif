@@ -1,0 +1,343 @@
+# Benchmark "(null)" written by ABC on Tue Oct 28 13:34:32 2025
+.model (null)
+.inputs n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 n17 n18 n19 \
+ n20 n21 n22 n23 n24 n25 n26 n27 n28
+.outputs n29 n30 n31 n32 n33 n34 n35 n36 n37 n38 n39 n40 n41 n42 n43 n44 \
+ n45 n46 n47 n48 n49 n50 n51 n52 n53 n54 n55 n56 n57 n58 n59 n60 n61 n62 \
+ n63 n64 n65 n66 n67 n68 n69 n70 n71 n72 n73 n74 n75 n76 n77 n78 n79 n80 \
+ n81 n82 n83 n84 n85 n86 n87 n88 n89 n90 n91 n92 n93 n94 n95 n96 n97 n98 \
+ n99 n100 n101 n102 n103 n104 n105 n106 n107 n108 n109 n110 n111 n112 n113 \
+ n114
+.names n1 n2 new_n115
+00 1
+.names n3 new_n115 n29
+11 1
+.names n10 n29 new_n117
+00 1
+.names n7 new_n117 n30
+01 1
+.names n11 n30 new_n119
+11 1
+.names n8 new_n119 n31
+11 1
+.names n4 n31 n32
+01 1
+.names n12 n32 n33
+00 1
+.names n5 new_n115 n34
+11 1
+.names n13 n14 new_n124
+01 1
+.names n34 new_n124 n35
+10 1
+.names n1 n2 n36
+01 1
+.names n3 n36 n37
+11 1
+.names n1 n2 new_n128
+10 1
+.names n5 new_n128 n38
+01 1
+.names n5 n36 n39
+11 1
+.names n37 n38 new_n131
+01 1
+.names n13 n39 new_n132
+00 1
+.names new_n131 new_n132 new_n133
+11 1
+.names n34 new_n133 n40
+00 1
+.names n14 n15 new_n135
+10 1
+.names n34 new_n135 n41
+10 1
+.names n15 n39 new_n137
+00 1
+.names new_n131 new_n137 new_n138
+11 1
+.names n34 new_n138 n42
+00 1
+.names n14 n16 new_n140
+10 1
+.names n34 new_n140 n43
+10 1
+.names n16 n39 new_n142
+00 1
+.names new_n131 new_n142 new_n143
+11 1
+.names n34 new_n143 n44
+00 1
+.names n34 n39 new_n145
+00 1
+.names n17 new_n145 new_n146
+11 1
+.names new_n131 new_n146 n45
+11 1
+.names n17 n34 new_n148
+11 1
+.names n14 new_n148 new_n149
+11 1
+.names n45 new_n149 n46
+00 1
+.names n19 new_n145 new_n151
+11 1
+.names new_n131 new_n151 n47
+11 1
+.names n19 n34 new_n153
+11 1
+.names n14 new_n153 new_n154
+11 1
+.names n47 new_n154 n48
+00 1
+.names n20 new_n145 new_n156
+11 1
+.names new_n131 new_n156 n49
+11 1
+.names n20 n34 new_n158
+11 1
+.names n14 new_n158 new_n159
+11 1
+.names n49 new_n159 n50
+00 1
+.names n21 new_n145 new_n161
+11 1
+.names new_n131 new_n161 n51
+11 1
+.names n21 n34 new_n163
+11 1
+.names n14 new_n163 new_n164
+11 1
+.names n51 new_n164 n52
+00 1
+.names n38 n39 n53
+10 1
+.names n22 n37 new_n167
+10 1
+.names n34 n53 new_n168
+01 1
+.names new_n167 new_n168 n54
+11 1
+.names n22 n34 new_n170
+11 1
+.names n14 new_n170 new_n171
+11 1
+.names n54 new_n171 n55
+00 1
+.names n23 new_n145 new_n173
+11 1
+.names new_n131 new_n173 n56
+11 1
+.names n23 n34 new_n175
+11 1
+.names n14 new_n175 new_n176
+11 1
+.names n56 new_n176 n57
+00 1
+.names n27 n34 new_n178
+01 1
+.names n6 n37 new_n179
+00 1
+.names n53 new_n179 new_n180
+11 1
+.names n34 new_n180 new_n181
+00 1
+.names n18 new_n181 new_n182
+10 1
+.names new_n178 new_n182 new_n183
+01 1
+.names n28 new_n183 n58
+10 1
+.names n26 n58 new_n185
+00 1
+.names n25 new_n185 new_n186
+01 1
+.names n24 new_n186 new_n187
+01 1
+.names n33 new_n187 n59
+11 1
+.names n12 n32 n60
+10 1
+.names n9 n59 new_n190
+01 1
+.names n60 new_n190 n61
+00 0
+.names n14 n34 n62
+01 1
+.names n29 n34 n63
+01 1
+.names n14 n63 n64
+01 1
+.names n3 new_n128 n65
+01 1
+.names n9 n59 n66
+11 1
+.names n28 n66 n67
+11 1
+.names n38 n65 n68
+00 1
+.names n37 n39 n69
+00 1
+.names n29 n34 new_n200
+00 1
+.names n69 new_n200 n70
+11 1
+.names n68 n70 n71
+01 1
+.names n34 n37 n72
+01 1
+.names n29 n72 n73
+01 1
+.names n14 n15 n74
+00 1
+.names n13 n14 n75
+00 1
+.names n14 n16 n76
+00 1
+.names n14 new_n153 n77
+01 1
+.names n19 n29 n78
+11 1
+.names n14 new_n148 n79
+01 1
+.names n17 n29 n80
+11 1
+.names n14 new_n163 n81
+01 1
+.names n21 n29 n82
+11 1
+.names n14 new_n158 n83
+01 1
+.names n20 n29 n84
+11 1
+.names n14 new_n175 n85
+01 1
+.names n23 n29 n86
+11 1
+.names n14 new_n170 n87
+01 1
+.names n22 n29 n88
+11 1
+.names n13 n15 new_n220
+10 1
+.names n16 new_n220 n89
+01 1
+.names n13 n15 n90
+00 1
+.names n13 n15 new_n223
+01 1
+.names n16 new_n223 n91
+01 1
+.names n13 n15 new_n225
+11 1
+.names n16 new_n225 n92
+01 1
+.names n16 n90 n93
+11 1
+.names n16 new_n220 n94
+11 1
+.names n16 new_n223 n95
+11 1
+.names n16 new_n225 n96
+11 1
+.names n14 n67 n97
+11 1
+.names n14 n67 n98
+10 1
+.names n34 n37 n99
+00 1
+.names n6 n67 n100
+01 1
+.names n29 new_n145 new_n235
+01 1
+.names new_n131 new_n235 n101
+11 1
+.names n19 n65 new_n237
+11 1
+.names n38 new_n237 new_n238
+00 1
+.names n19 n38 new_n239
+01 1
+.names n70 new_n239 new_n240
+10 1
+.names new_n238 new_n240 n102
+01 1
+.names n17 n65 new_n242
+11 1
+.names n38 new_n242 new_n243
+00 1
+.names n17 n38 new_n244
+01 1
+.names n70 new_n244 new_n245
+10 1
+.names new_n243 new_n245 n103
+01 1
+.names n21 n65 new_n247
+11 1
+.names n38 new_n247 new_n248
+00 1
+.names n21 n38 new_n249
+01 1
+.names n70 new_n249 new_n250
+10 1
+.names new_n248 new_n250 n104
+01 1
+.names n20 n65 new_n252
+11 1
+.names n38 new_n252 new_n253
+00 1
+.names n20 n38 new_n254
+01 1
+.names n70 new_n254 new_n255
+10 1
+.names new_n253 new_n255 n105
+01 1
+.names n23 n65 new_n257
+11 1
+.names n38 new_n257 new_n258
+00 1
+.names n23 n38 new_n259
+01 1
+.names n70 new_n259 new_n260
+10 1
+.names new_n258 new_n260 n106
+01 1
+.names n22 n65 new_n262
+11 1
+.names n38 new_n262 new_n263
+00 1
+.names n22 n38 new_n264
+01 1
+.names n70 new_n264 new_n265
+10 1
+.names new_n263 new_n265 n107
+01 1
+.names n65 new_n200 new_n267
+11 1
+.names n69 new_n267 n108
+11 1
+.names n19 n29 new_n269
+10 1
+.names n72 new_n269 n109
+11 1
+.names n17 n29 new_n271
+10 1
+.names n72 new_n271 n110
+11 1
+.names n21 n29 new_n273
+10 1
+.names n72 new_n273 n111
+11 1
+.names n20 n29 new_n275
+10 1
+.names n72 new_n275 n112
+11 1
+.names n23 n29 new_n277
+10 1
+.names n72 new_n277 n113
+11 1
+.names n22 n29 new_n279
+10 1
+.names n72 new_n279 n114
+11 1
+.end

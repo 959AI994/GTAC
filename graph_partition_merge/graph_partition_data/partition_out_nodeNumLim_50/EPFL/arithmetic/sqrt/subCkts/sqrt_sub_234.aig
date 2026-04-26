@@ -1,0 +1,29 @@
+aig 50 11 0 7 39
+50
+54
+68
+70
+84
+98
+100
+#/&*&%*2.)%6+:@)-D/HL -i0 n1
+i1 n2
+i2 n3
+i3 n4
+i4 n5
+i5 n6
+i6 n7
+i7 n8
+i8 n9
+i9 n10
+i10 n11
+o0 n12
+o1 n13
+o2 n14
+o3 n15
+o4 n16
+o5 n17
+o6 n18
+c
+This file was written by ABC on Mon Nov  3 15:22:33 2025
+For information about AIGER format, refer to http://fmv.jku.at/aiger

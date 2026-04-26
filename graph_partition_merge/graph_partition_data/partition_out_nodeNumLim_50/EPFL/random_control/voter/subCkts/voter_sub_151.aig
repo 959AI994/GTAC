@@ -1,0 +1,46 @@
+aig 60 16 0 12 44
+36
+50
+84
+92
+94
+100
+104
+108
+114
+116
+118
+120
+"##(*+./+)+.6	*
+57
+TNR_XTQi0 n1
+i1 n2
+i2 n3
+i3 n4
+i4 n5
+i5 n6
+i6 n7
+i7 n8
+i8 n9
+i9 n10
+i10 n11
+i11 n12
+i12 n13
+i13 n14
+i14 n15
+i15 n16
+o0 n17
+o1 n18
+o2 n19
+o3 n20
+o4 n21
+o5 n22
+o6 n23
+o7 n24
+o8 n25
+o9 n26
+o10 n27
+o11 n28
+c
+This file was written by ABC on Mon Nov  3 16:03:23 2025
+For information about AIGER format, refer to http://fmv.jku.at/aiger

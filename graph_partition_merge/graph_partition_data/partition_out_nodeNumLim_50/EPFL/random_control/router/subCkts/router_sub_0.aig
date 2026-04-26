@@ -1,0 +1,82 @@
+aig 30 8 0 35 22
+22
+28
+34
+40
+46
+52
+56
+60
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+&&i0 n1
+i1 n2
+i2 n3
+i3 n4
+i4 n5
+i5 n6
+i6 n7
+i7 n8
+o0 n9
+o1 n10
+o2 n11
+o3 n12
+o4 n13
+o5 n14
+o6 n15
+o7 n16
+o8 n17
+o9 n18
+o10 n19
+o11 n20
+o12 n21
+o13 n22
+o14 n23
+o15 n24
+o16 n25
+o17 n26
+o18 n27
+o19 n28
+o20 n29
+o21 n30
+o22 n31
+o23 n32
+o24 n33
+o25 n34
+o26 n35
+o27 n36
+o28 n37
+o29 n38
+o30 n39
+o31 n40
+o32 n41
+o33 n42
+o34 n43
+c
+This file was written by ABC on Mon Nov  3 16:03:15 2025
+For information about AIGER format, refer to http://fmv.jku.at/aiger

@@ -19,12 +19,12 @@ import tensorflow as tf
 import tf_keras as keras
 import npn
 from official.nlp import modeling as nlp
-from scalable_circuit_transformer_refdfs.dynamic_encoding import DynamicEncoder
-from scalable_circuit_transformer_refdfs.tensorflow_transformer import Seq2SeqTransformer
-from scalable_circuit_transformer_refdfs.utils import *
-from scalable_circuit_transformer_refdfs.environment import LogicNetworkEnv, ActionMaskTimeoutError
-from scalable_circuit_transformer_refdfs.encoding import get_pos_encoding_n_vars
-from scalable_circuit_transformer_refdfs.monte_carlo_tt import (
+from src.dynamic_encoding import DynamicEncoder
+from src.tensorflow_transformer import Seq2SeqTransformer
+from src.utils import *
+from src.environment import LogicNetworkEnv, ActionMaskTimeoutError
+from src.encoding import get_pos_encoding_n_vars
+from src.monte_carlo_tt import (
     compute_tts_adaptive,
     compute_input_tt_approximate,
     generate_input_samples
@@ -187,7 +187,7 @@ class ScalableCircuitTransformer:
         self.use_kv_cache = True
 
         # Bind inference methods from sact_inference module
-        from scalable_circuit_transformer_refdfs.sact_inference import (
+        from src.sact_inference import (
             _batch_estimate_policy,
             _batch_estimate_v_value_via_simulation_kvcache,
             optimize,
@@ -288,7 +288,7 @@ class ScalableCircuitTransformer:
         pos_enc = pos_enc[:self.max_seq_length]
 
         # Convert position encoding to binary representation
-        from scalable_circuit_transformer_refdfs.encoding import get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS
+        from src.encoding import get_pos_encoding_n_vars, _int_to_binary_lsb, _NPN_INT_TO_TT_MAX_VARS
         
         n_vars = get_pos_encoding_n_vars(self.max_tree_depth, self.max_outputs)
 
@@ -753,7 +753,7 @@ class ScalableCircuitTransformer:
                               validation_steps, optimizer, batch_size, epochs, initial_epoch,
                               ckpt_save_path, latest_ckpt_only, num_train_samples, callbacks):
         """Custom training loop that prints detailed debug info when loss=inf."""
-        from scalable_circuit_transformer_refdfs.tensorflow_transformer import masked_loss, masked_accuracy
+        from src.tensorflow_transformer import masked_loss, masked_accuracy
 
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction='none')
@@ -1001,7 +1001,7 @@ class ScalableCircuitTransformer:
             summary_writer = tf.summary.create_file_writer(log_dir)
 
         # Import loss and accuracy functions
-        from scalable_circuit_transformer_refdfs.tensorflow_transformer import masked_loss, masked_accuracy
+        from src.tensorflow_transformer import masked_loss, masked_accuracy
 
         # Compile model
         if distributed:
@@ -1091,7 +1091,7 @@ class ScalableCircuitTransformer:
             )
             try:
                 prepare_batch_with_generation = __import__(
-                    "scalable_circuit_transformer_refdfs.prepare_self_correction_data",
+                    "src.prepare_self_correction_data",
                     fromlist=["prepare_batch_with_generation"],
                 ).prepare_batch_with_generation
             except ImportError:

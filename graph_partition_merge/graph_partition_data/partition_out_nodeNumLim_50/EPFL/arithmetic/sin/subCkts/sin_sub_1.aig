@@ -1,0 +1,40 @@
+aig 40 8 0 13 32
+30
+32
+60
+62
+64
+66
+68
+70
+72
+74
+76
+78
+80
+!#*!-
+$	0)
+60<(i0 n1
+i1 n2
+i2 n3
+i3 n4
+i4 n5
+i5 n6
+i6 n7
+i7 n8
+o0 n9
+o1 n10
+o2 n11
+o3 n12
+o4 n13
+o5 n14
+o6 n15
+o7 n16
+o8 n17
+o9 n18
+o10 n19
+o11 n20
+o12 n21
+c
+This file was written by ABC on Mon Nov  3 15:21:59 2025
+For information about AIGER format, refer to http://fmv.jku.at/aiger
