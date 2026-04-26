@@ -67,6 +67,10 @@ python -m src.inference_subgraphs \
   --save-results
 ```
 
+## Graph partition & merge
+
+The `graph_partition_merge/` directory provides a C++ toolchain (build with CMake to produce `als.out`) for **partitioning** large circuits into subgraphs and **merging** them after approximate optimization, plus small Python helpers (`batch_graph_partition.py`, `batch_graph_merge.py`, etc.). It ships with EPFL-oriented benchmark material and related archives under that tree. See `graph_partition_merge/README.md` for build steps and example commands.
+
 ## Reproducibility Notes
 
 - The training data shuffle uses a fixed seed by default (configurable via the example script).
