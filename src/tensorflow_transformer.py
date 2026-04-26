@@ -11,11 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""Implement Seq2Seq Transformer model by TF official NLP library.
-
-Model paper: https://arxiv.org/pdf/1706.03762.pdf
-"""
 import math
 import tensorflow as tf
 import tf_keras as keras
@@ -27,15 +22,6 @@ EOS_ID = 1
 
 
 class Seq2SeqTransformer(keras.Model):
-  """Transformer model with Keras.
-
-  Implemented as described in: https://arxiv.org/pdf/1706.03762.pdf
-
-  The Transformer model consists of an encoder and decoder. The input is an int
-  sequence (or a batch of sequences). The encoder produces a continuous
-  representation, and the decoder uses the encoder output to generate
-  probabilities for the output sequence.
-  """
 
   def __init__(self,
                enc_vocab_size=33708,

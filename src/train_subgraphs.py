@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Training script for subgraphs using Scalable Circuit Transformer
+Training script for subgraphs using Scalable Approximate Circuit Transformer(GTAC)
 
-This script trains the SACT model on circuit optimization datasets,
+This script trains the Scalable Approximate Circuit Transformer(GTAC) model on circuit optimization datasets,
 supporting variable-sized circuits (up to 256 inputs/outputs).
 
 For inference, use inference_subgraphs.py.

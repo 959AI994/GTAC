@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Inference script for subgraphs using Scalable Circuit Transformer
+Inference script for subgraphs using Scalable Approximate Circuit Transformer(GTAC)
 
-This script performs circuit optimization on subgraphs using the SACT model.
+This script performs circuit optimization on subgraphs using the Approximate Circuit Transformer(GTAC) model.
 """
 
 import os

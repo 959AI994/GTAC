@@ -1,8 +1,8 @@
 """
-Inference methods for ScalableCircuitTransformer
+Inference methods for Scalable Approximate Circuit Transformer(GTAC)
 
 This module contains all inference-related methods adapted for dynamic encoding.
-These methods are bound to ScalableCircuitTransformer instances at initialization.
+These methods are bound to Scalable Approximate Circuit Transformer(GTAC) instances at initialization.
 """
 
 import time

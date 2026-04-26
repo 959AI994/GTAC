@@ -1,7 +1,7 @@
 """
-Scalable Circuit Transformer Model
+Scalable Approximate Circuit Transformer(GTAC) Model
 
-This module implements a circuit transformer that can handle variable input/output sizes
+This module implements a approximate circuit transformer that can handle variable input/output sizes
 through dynamic vocabulary and adaptive attention masking.
 
 Key Features:

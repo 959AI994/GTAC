@@ -24,6 +24,12 @@ wget https://huggingface.co/datasets/[ANONYMOUS]/circuit-transformer/resolve/mai
 wget https://huggingface.co/datasets/[ANONYMOUS]/Approximate-Circuit-transformer/resolve/main/random_circuit_0.1_200k.zip
 ```
 
+We also used the corresponding subgraph datasets of EPFL and Opencores to further train the model, in order to improve GTAC's inference capabilities for different inputs and outputs and large circuits.
+
+```bash
+wget https://huggingface.co/datasets/[ANONYMOUS]/Approximate-Circuit-transformer/resolve/main/subckt_0.1.zip
+```
+
 ### Test Data
 
 Small-scale benchmark set for quick functional testing.
@@ -31,6 +37,7 @@ Small-scale benchmark set for quick functional testing.
 ```bash
 wget https://huggingface.co/datasets/[ANONYMOUS]/circuit-transformer/resolve/main/test_data.zip
 ```
+If you want to infer subgraphs, please refer to the subgraph data in the `graph_partition_merge/graph_partition_data` directory.
 
 ### Approximate Circuit Benchmarks (ALSRAC, error rate = {1%, 5%, 10%})
 
