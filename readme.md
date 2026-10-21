@@ -82,6 +82,7 @@ The `graph_partition_merge/` directory provides a C++ toolchain (build with CMak
 
 - The training data shuffle uses a fixed seed by default (configurable via the example script).
 - Reported results may vary across GPU / CUDA / driver versions; please include your hardware details when reporting numbers.
+- Old version（only for IWLS datasets: https://github.com/959AI994/GTAC-Core）
 
 ## License & Anonymity
 
